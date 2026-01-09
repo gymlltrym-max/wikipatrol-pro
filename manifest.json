@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "WikiPatrol Live Pro",
+  "version": "2.0",
+  "description": "ניטור בזמן אמת של עריכות בויקיפדיה pro",
+  "permissions": [
+    "sidePanel",
+    "storage",
+    "notifications",
+    "alarms"
+  ],
+  "host_permissions": [
+    "https://he.wikipedia.org/*",
+    "https://stream.wikimedia.org/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+ },
+  "icons": {
+    "16": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  }
+}

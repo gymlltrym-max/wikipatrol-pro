@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    :root {
+      --primary-color: #36c;
+      --bg-color: #f4f5f7;
+      --card-bg: #ffffff;
+      --controls-bg: #ffffff;
+      --text-main: #202124;
+      --text-muted: #5f6368;
+      --border-color: #dadce0;
+      --link-color: #5f6368;
+      --link-hover: #36c;
+      
+      /* צבעי ORES */
+      --ores-bad-bg: #fadbd8;
+      --ores-bad-border: #a61c00;
+      --ores-very-bad-bg: #fce8e6;
+      --ores-very-bad-border: #d93025;
+      --ores-good-bg: #e6f4ea;
+      --ores-good-border: #137333;
+    }
+
+    body.dark-mode {
+      --primary-color: #8ab4f8;
+      --bg-color: #202124;
+      --card-bg: #292a2d;
+      --controls-bg: #292a2d;
+      --text-main: #e8eaed;
+      --text-muted: #9aa0a6;
+      --border-color: #3c4043;
+      --link-color: #9aa0a6;
+      --link-hover: #8ab4f8;
+
+      --ores-bad-bg: #5a1000;
+      --ores-bad-border: #ff8a80;
+      --ores-very-bad-bg: #3e2a2a;
+      --ores-very-bad-border: #f28b82;
+      --ores-good-bg: #0f3618;
+      --ores-good-border: #81c995;
+    }
+
+    body { 
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+      margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; 
+      background: var(--bg-color); color: var(--text-main);
+      overflow: hidden; 
+      transition: background 0.3s, color 0.3s;
+    }
+    
+    #theme-toggle-btn {
+      position: absolute; top: 12px; left: 12px;
+      background: transparent; border: none; font-size: 18px; cursor: pointer;
+      padding: 5px; border-radius: 50%;
+    }
+    #theme-toggle-btn:hover { background: rgba(128,128,128,0.2); }
+
+    .info-icon {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 16px; height: 16px; background: var(--border-color); color: var(--text-muted);
+      border-radius: 50%; font-size: 11px; font-weight: bold; cursor: help; margin-right: 5px; position: relative;
+    }
+    .info-icon:hover { background: var(--primary-color); color: #fff; }
+    .info-icon::after {
+      content: attr(data-tooltip); position: absolute; top: 100%; right: 50%; transform: translateX(50%);
+      background: #333; color: #fff; padding: 8px 10px; border-radius: 4px; font-size: 11px;
+      width: 200px; text-align: center; z-index: 1000; display: none; margin-top: 5px; pointer-events: none;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.3); line-height: 1.4;
+    }
+    .info-icon:hover::after { display: block; }
+
+    #controls {
+      background: var(--controls-bg); padding: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      z-index: 10; border-bottom: 1px solid var(--border-color);
+    }
+    
+    .checkbox-row { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 8px; user-select: none; }
+    input[type="checkbox"] { cursor: pointer; accent-color: var(--primary-color); }
+
+    /* עיצוב התפריט הנפתח החדש */
+    select.filter-select {
+        padding: 4px 8px;
+        border-radius: 4px;
+        border: 1px solid var(--border-color);
+        background: var(--card-bg);
+        color: var(--text-main);
+        font-size: 12px;
+        outline: none;
+        cursor: pointer;
+    }
+
+    .btn-group { display: flex; gap: 8px; margin-top: 10px; }
+    .btn {
+      flex: 1; padding: 8px; font-size: 12px; cursor: pointer; background: var(--card-bg);
+      border: 1px solid var(--border-color); border-radius: 4px; font-weight: 500; color: var(--primary-color);
+    }
+    .btn:hover { opacity: 0.8; }
+
+    #watchlist-section { 
+      background: var(--bg-color); border: 1px solid var(--border-color);
+      border-radius: 6px; padding: 8px; margin-top: 10px;
+    }
+    #watchlist-header { font-size: 12px; font-weight: bold; color: var(--text-muted); cursor: pointer; display: flex; justify-content: space-between; }
+    #watchlist-content { display: none; margin-top: 8px; } 
+    #watchlist-content.open { display: block; }
+    
+    .add-user-row { display: flex; gap: 5px; margin-bottom: 8px; }
+    #input-username { flex: 1; padding: 6px; font-size: 12px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--card-bg); color: var(--text-main); }
+    #btn-add-user { padding: 6px 12px; font-size: 12px; background: var(--primary-color); color: white; border: none; border-radius: 4px; cursor: pointer; }
+    .tracked-user { display: flex; align-items: center; justify-content: space-between; background: var(--card-bg); border: 1px solid var(--border-color); padding: 6px 10px; margin-bottom: 4px; border-radius: 4px; font-size: 12px; }
+    .remove-user { color: #d93025; cursor: pointer; font-weight: bold; padding: 0 4px; }
+    
+    #feed-container { 
+      flex: 1; 
+      overflow-y: scroll; 
+      padding: 10px; 
+      background: var(--bg-color);
+    }
+
+    .change-item {
+      background: var(--card-bg); border-radius: 8px; padding: 12px; margin-bottom: 10px; cursor: pointer;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-left: 4px solid transparent; color: var(--text-main);
+      position: relative;
+    }
+    .change-item:hover { transform: translateY(-1px); }
+    .change-item.selected { border-left-color: var(--primary-color); background: rgba(51, 102, 204, 0.05); }
+    .change-item.tracked-highlight { border-left-color: #fbbc04; background: rgba(251, 188, 4, 0.1); }
+
+    .change-item.ores-bad { border-left-color: var(--ores-bad-border) !important; background: var(--ores-bad-bg) !important; }
+    .change-item.ores-very-bad { border-left-color: var(--ores-very-bad-border) !important; background: var(--ores-very-bad-bg) !important; }
+    .change-item.ores-good { border-left-color: var(--ores-good-border) !important; background: var(--ores-good-bg) !important; }
+
+    /* --- Filters Logic --- */
+    .filter-anon-active .type-registered { display: none !important; }
+    .filter-latest-active .change-item:not(.is-latest) { display: none !important; }
+    .filter-ns0-active .change-item:not(.namespace-0) { display: none !important; }
+    
+    /* פילטר ORES חדש: הסתרת כל מה שלא אדום/בורדו */
+    .filter-ores-bad-active .change-item:not(.ores-bad):not(.ores-very-bad) { display: none !important; }
+    
+    /* פילטר ORES חדש: הסתרת כל מה שלא ירוק */
+    .filter-ores-good-active .change-item:not(.ores-good) { display: none !important; }
+    
+    .title { font-weight: 700; color: var(--primary-color); font-size: 14px; display: flex; align-items: center; gap: 4px; }
+    
+    .meta-row { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); margin-bottom: 6px; margin-top: 4px; align-items: center; }
+    .user-info { display: flex; align-items: center; gap: 6px; }
+    .user-name { font-weight: 600; display: inline-block; padding: 1px 4px; border-radius: 3px; }
+    .user-name.anon-style { color: #d93025; background: rgba(217, 48, 37, 0.1); }
+    
+    .action-link { text-decoration: none; color: var(--link-color); font-size: 11px; margin-right: 2px; padding: 2px 4px; border-radius: 3px; transition: color 0.2s, background 0.2s; display: inline-flex; align-items: center; gap: 2px; }
+    .action-link:hover { color: var(--link-hover); background: rgba(128,128,128,0.1); }
+    
+    .time-info { display: flex; align-items: center; gap: 8px; }
+
+    .lightning-icon { width: 20px; height: 20px; filter: drop-shadow(0 0 2px gold); animation: pulse 2s infinite; }
+    @keyframes pulse { 0% { opacity: 0.8; } 50% { opacity: 1; transform: scale(1.1); } 100% { opacity: 0.8; } }
+
+    .comment { font-size: 12px; opacity: 0.9; background: rgba(128,128,128,0.1); padding: 4px 8px; border-radius: 4px; font-style: italic; margin-top: 5px; }
+    
+    .diff-size { font-weight: bold; font-family: monospace; font-size: 12px; }
+    .plus { color: #137333; background: #e6f4ea; padding: 2px 4px; border-radius: 3px; }
+    .minus { color: #d93025; background: #fce8e6; padding: 2px 4px; border-radius: 3px; }
+    body.dark-mode .plus { color: #81c995; background: #0f3618; }
+    body.dark-mode .minus { color: #f28b82; background: #381212; }
+
+    #preview-container { height: 40%; overflow-y: auto; background: var(--card-bg); padding: 15px; border-top: 1px solid var(--border-color); }
+    #preview-title { font-weight: bold; margin-bottom: 15px; border-bottom: 2px solid var(--primary-color); padding-bottom: 8px; font-size: 15px; }
+    .diff-link-btn { display: block; text-align: center; padding: 10px; background: var(--primary-color); color: #fff; text-decoration: none; border-radius: 6px; font-weight: bold; margin-top: 15px; }
+    
+    table.diff { width: 100%; font-size: 12px; font-family: monospace; border-spacing: 0; color: var(--text-main); }
+    td.diff-context { background: var(--bg-color); color: var(--text-muted); padding: 2px 5px; border-left: 3px solid var(--border-color); }
+    td.diff-deletedline { background: #ffeef0; padding: 2px 5px; }
+    td.diff-addedline { background: #e6ffed; padding: 2px 5px; }
+    del { text-decoration: none; color: #b00; background: #ffdbdb; font-weight: bold; }
+    ins { text-decoration: none; color: #007000; background: #d1f7d6; font-weight: bold; }
+    body.dark-mode td.diff-deletedline { background: #381212; }
+    body.dark-mode td.diff-addedline { background: #0f3618; }
+    body.dark-mode del { color: #ffadad; background: #5a1e1e; }
+    body.dark-mode ins { color: #81c995; background: #134222; }
+
+    .empty-state { text-align: center; color: var(--text-muted); margin-top: 60px; font-size: 14px; }
+    #loading { text-align: center; color: var(--text-muted); display: none; margin-top: 20px; }
+  </style>
+</head>
+<body id="main-body">
+
+  <div id="controls">
+    <button id="theme-toggle-btn" title="החלף מצב כהה/בהיר">🌙</button>
+
+    <div style="margin-right: 30px;">
+        <div class="checkbox-row">
+            <input type="checkbox" id="chk-anon">
+            <label for="chk-anon">הצג אנונימיים בלבד</label>
+            <span class="info-icon" data-tooltip="מציג רק עריכות שבוצעו מכתובות IP או חשבונות זמניים.">i</span>
+        </div>
+
+        <div class="checkbox-row">
+            <input type="checkbox" id="chk-latest">
+            <label for="chk-latest">הצג גרסה אחרונה (⚡)</label>
+            <span class="info-icon" data-tooltip="מציג רק את העריכה העדכנית ביותר של כל דף.">i</span>
+        </div>
+
+        <div class="checkbox-row">
+            <input type="checkbox" id="chk-ns0">
+            <label for="chk-ns0">הצג ערכים בלבד (ללא שיחה)</label>
+            <span class="info-icon" data-tooltip="מסתיר דפי שיחה, טיוטות ודפי משתמש. מציג רק את מרחב הערכים הראשי.">i</span>
+        </div>
+
+        <div class="checkbox-row">
+            <input type="checkbox" id="chk-sound">
+            <label for="chk-sound">השמע צליל בעריכה חדשה 🔔</label>
+            <span class="info-icon" data-tooltip="משמיע צליל 'דינג' כשנכנסת עריכה חדשה העומדת בתנאי הסינון שבחרת.">i</span>
+        </div>
+
+        <!-- תפריט הסינון החדש של ORES -->
+        <div class="checkbox-row" style="margin-top: 8px;">
+            <label for="select-ores" style="margin-left: 5px;">סינון AI:</label>
+            <select id="select-ores" class="filter-select">
+                <option value="all">הכל (רגיל)</option>
+                <option value="bad">🔴 חשד להשחתה</option>
+                <option value="good">🟢 כוונה טובה</option>
+            </select>
+            <span class="info-icon" data-tooltip="מסנן עריכות לפי ציון ה-AI של ויקיפדיה. 'חשד להשחתה' יציג רק צבעים אדומים.">i</span>
+        </div>
+    </div>
+    
+    <div id="watchlist-section">
+        <div id="watchlist-header">
+            <span>מעקב וניטור אישי</span>
+            <span style="font-size:10px">▼</span>
+        </div>
+        <div id="watchlist-content">
+            <div style="font-size:11px; color:var(--text-muted); margin-bottom:5px; display:flex; align-items:center;">
+                הוסף משתמש להתראות
+                <span class="info-icon" data-tooltip="חובה: כדי לקבל התראות כשהחלון סגור, לך במחשב ל: הגדרות > מערכת > התראות > והפעל את Google Chrome.">i</span>
+            </div>
+            <div class="add-user-row">
+                <input type="text" id="input-username" placeholder="שם משתמש...">
+                <button id="btn-add-user">הוסף</button>
+            </div>
+            <div id="watchlist-list"></div>
+        </div>
+    </div>
+
+    <div style="font-size:11px; color:var(--text-muted); margin-top:10px;">טען היסטוריה אחרונה:</div>
+    <div class="btn-group">
+      <button class="btn" id="btn-10">10</button>
+      <button class="btn" id="btn-50">50</button>
+      <button class="btn" id="btn-100">100</button>
+    </div>
+  </div>
+
+  <div id="feed-container">
+    <div class="empty-state">
+      <img src="icon.png" style="width:48px; opacity:0.3; margin-bottom:10px; filter: grayscale(1);"><br>
+      ממתין לעריכות בזמן אמת...
+    </div>
+  </div>
+
+  <div id="preview-container">
+    <div id="preview-title">תצוגה מקדימה</div>
+    <div id="loading">טוען נתונים...</div>
+    <div id="diff-content">בחר עריכה מהרשימה לצפייה.</div>
+  </div>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>
