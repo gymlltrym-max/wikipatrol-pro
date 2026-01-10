@@ -14,13 +14,10 @@
       --link-color: #5f6368;
       --link-hover: #36c;
       
-      /* צבעי ORES */
-      --ores-bad-bg: #fadbd8;
-      --ores-bad-border: #a61c00;
-      --ores-very-bad-bg: #fce8e6;
-      --ores-very-bad-border: #d93025;
-      --ores-good-bg: #e6f4ea;
-      --ores-good-border: #137333;
+      /* ORES Colors */
+      --ores-bad-bg: #fadbd8; --ores-bad-border: #a61c00;
+      --ores-very-bad-bg: #fce8e6; --ores-very-bad-border: #d93025;
+      --ores-good-bg: #e6f4ea; --ores-good-border: #137333;
     }
 
     body.dark-mode {
@@ -34,20 +31,16 @@
       --link-color: #9aa0a6;
       --link-hover: #8ab4f8;
 
-      --ores-bad-bg: #5a1000;
-      --ores-bad-border: #ff8a80;
-      --ores-very-bad-bg: #3e2a2a;
-      --ores-very-bad-border: #f28b82;
-      --ores-good-bg: #0f3618;
-      --ores-good-border: #81c995;
+      --ores-bad-bg: #5a1000; --ores-bad-border: #ff8a80;
+      --ores-very-bad-bg: #3e2a2a; --ores-very-bad-border: #f28b82;
+      --ores-good-bg: #0f3618; --ores-good-border: #81c995;
     }
 
     body { 
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
       margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; 
       background: var(--bg-color); color: var(--text-main);
-      overflow: hidden; 
-      transition: background 0.3s, color 0.3s;
+      overflow: hidden; transition: background 0.3s, color 0.3s;
     }
     
     #theme-toggle-btn {
@@ -79,16 +72,9 @@
     .checkbox-row { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 8px; user-select: none; }
     input[type="checkbox"] { cursor: pointer; accent-color: var(--primary-color); }
 
-    /* עיצוב התפריט הנפתח החדש */
     select.filter-select {
-        padding: 4px 8px;
-        border-radius: 4px;
-        border: 1px solid var(--border-color);
-        background: var(--card-bg);
-        color: var(--text-main);
-        font-size: 12px;
-        outline: none;
-        cursor: pointer;
+        padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border-color);
+        background: var(--card-bg); color: var(--text-main); font-size: 12px; outline: none; cursor: pointer;
     }
 
     .btn-group { display: flex; gap: 8px; margin-top: 10px; }
@@ -97,6 +83,12 @@
       border: 1px solid var(--border-color); border-radius: 4px; font-weight: 500; color: var(--primary-color);
     }
     .btn:hover { opacity: 0.8; }
+
+    /* כפתור בדיקת התראות */
+    .btn-test {
+        width: 100%; margin-top: 8px; background: var(--primary-color); color: #fff; border: none; padding: 6px;
+    }
+    .btn-test:hover { background: #2c5ebd; }
 
     #watchlist-section { 
       background: var(--bg-color); border: 1px solid var(--border-color);
@@ -112,17 +104,11 @@
     .tracked-user { display: flex; align-items: center; justify-content: space-between; background: var(--card-bg); border: 1px solid var(--border-color); padding: 6px 10px; margin-bottom: 4px; border-radius: 4px; font-size: 12px; }
     .remove-user { color: #d93025; cursor: pointer; font-weight: bold; padding: 0 4px; }
     
-    #feed-container { 
-      flex: 1; 
-      overflow-y: scroll; 
-      padding: 10px; 
-      background: var(--bg-color);
-    }
+    #feed-container { flex: 1; overflow-y: scroll; padding: 10px; background: var(--bg-color); }
 
     .change-item {
       background: var(--card-bg); border-radius: 8px; padding: 12px; margin-bottom: 10px; cursor: pointer;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-left: 4px solid transparent; color: var(--text-main);
-      position: relative;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-left: 4px solid transparent; color: var(--text-main); position: relative;
     }
     .change-item:hover { transform: translateY(-1px); }
     .change-item.selected { border-left-color: var(--primary-color); background: rgba(51, 102, 204, 0.05); }
@@ -132,34 +118,23 @@
     .change-item.ores-very-bad { border-left-color: var(--ores-very-bad-border) !important; background: var(--ores-very-bad-bg) !important; }
     .change-item.ores-good { border-left-color: var(--ores-good-border) !important; background: var(--ores-good-bg) !important; }
 
-    /* --- Filters Logic --- */
     .filter-anon-active .type-registered { display: none !important; }
     .filter-latest-active .change-item:not(.is-latest) { display: none !important; }
     .filter-ns0-active .change-item:not(.namespace-0) { display: none !important; }
-    
-    /* פילטר ORES חדש: הסתרת כל מה שלא אדום/בורדו */
     .filter-ores-bad-active .change-item:not(.ores-bad):not(.ores-very-bad) { display: none !important; }
-    
-    /* פילטר ORES חדש: הסתרת כל מה שלא ירוק */
     .filter-ores-good-active .change-item:not(.ores-good) { display: none !important; }
     
     .title { font-weight: 700; color: var(--primary-color); font-size: 14px; display: flex; align-items: center; gap: 4px; }
-    
     .meta-row { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); margin-bottom: 6px; margin-top: 4px; align-items: center; }
     .user-info { display: flex; align-items: center; gap: 6px; }
     .user-name { font-weight: 600; display: inline-block; padding: 1px 4px; border-radius: 3px; }
     .user-name.anon-style { color: #d93025; background: rgba(217, 48, 37, 0.1); }
-    
     .action-link { text-decoration: none; color: var(--link-color); font-size: 11px; margin-right: 2px; padding: 2px 4px; border-radius: 3px; transition: color 0.2s, background 0.2s; display: inline-flex; align-items: center; gap: 2px; }
     .action-link:hover { color: var(--link-hover); background: rgba(128,128,128,0.1); }
-    
     .time-info { display: flex; align-items: center; gap: 8px; }
-
     .lightning-icon { width: 20px; height: 20px; filter: drop-shadow(0 0 2px gold); animation: pulse 2s infinite; }
     @keyframes pulse { 0% { opacity: 0.8; } 50% { opacity: 1; transform: scale(1.1); } 100% { opacity: 0.8; } }
-
     .comment { font-size: 12px; opacity: 0.9; background: rgba(128,128,128,0.1); padding: 4px 8px; border-radius: 4px; font-style: italic; margin-top: 5px; }
-    
     .diff-size { font-weight: bold; font-family: monospace; font-size: 12px; }
     .plus { color: #137333; background: #e6f4ea; padding: 2px 4px; border-radius: 3px; }
     .minus { color: #d93025; background: #fce8e6; padding: 2px 4px; border-radius: 3px; }
@@ -205,17 +180,16 @@
 
         <div class="checkbox-row">
             <input type="checkbox" id="chk-ns0">
-            <label for="chk-ns0">הצג ערכים בלבד (ללא שיחה)</label>
-            <span class="info-icon" data-tooltip="מסתיר דפי שיחה, טיוטות ודפי משתמש. מציג רק את מרחב הערכים הראשי.">i</span>
+            <label for="chk-ns0">הצג ערכים בלבד</label>
+            <span class="info-icon" data-tooltip="מסתיר דפי שיחה, טיוטות ודפי משתמש.">i</span>
         </div>
 
         <div class="checkbox-row">
             <input type="checkbox" id="chk-sound">
-            <label for="chk-sound">השמע צליל בעריכה חדשה 🔔</label>
+            <label for="chk-sound">השמע צליל בעריכה חדשה (🔔)</label>
             <span class="info-icon" data-tooltip="משמיע צליל 'דינג' כשנכנסת עריכה חדשה העומדת בתנאי הסינון שבחרת.">i</span>
         </div>
 
-        <!-- תפריט הסינון החדש של ORES -->
         <div class="checkbox-row" style="margin-top: 8px;">
             <label for="select-ores" style="margin-left: 5px;">סינון AI:</label>
             <select id="select-ores" class="filter-select">
@@ -223,8 +197,10 @@
                 <option value="bad">🔴 חשד להשחתה</option>
                 <option value="good">🟢 כוונה טובה</option>
             </select>
-            <span class="info-icon" data-tooltip="מסנן עריכות לפי ציון ה-AI של ויקיפדיה. 'חשד להשחתה' יציג רק צבעים אדומים.">i</span>
         </div>
+
+        <!-- כפתור בדיקה חדש -->
+        <button id="btn-test-notification" class="btn btn-test">🔊 בדיקת התראות והרשאות</button>
     </div>
     
     <div id="watchlist-section">
@@ -235,7 +211,7 @@
         <div id="watchlist-content">
             <div style="font-size:11px; color:var(--text-muted); margin-bottom:5px; display:flex; align-items:center;">
                 הוסף משתמש להתראות
-                <span class="info-icon" data-tooltip="חובה: כדי לקבל התראות כשהחלון סגור, לך במחשב ל: הגדרות > מערכת > התראות > והפעל את Google Chrome.">i</span>
+                <span class="info-icon" data-tooltip="חובה: כדי לקבל התראות כשהחלון סגור, וודא שאישרת התראות למערכת ההפעלה.">i</span>
             </div>
             <div class="add-user-row">
                 <input type="text" id="input-username" placeholder="שם משתמש...">

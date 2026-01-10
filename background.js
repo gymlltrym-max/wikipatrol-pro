@@ -1,82 +1,107 @@
+// --- הגדרות פתיחת החלונית ---
 chrome.sidePanel
   .setPanelBehavior({ openPanelOnActionClick: true })
   .catch((error) => console.error(error));
 
-// משתנה לשמירת הטיימר
+// --- משתנים לניהול הטיימר ---
 let intervalId;
 
-// הפעלת הבדיקה המהירה
+// --- מנגנון Keep Alive (מונע מכרום להרוג את התוסף) ---
+const keepAlive = () => {
+  chrome.runtime.getPlatformInfo((info) => {});
+  setTimeout(keepAlive, 20000); 
+};
+
+chrome.runtime.onStartup.addListener(keepAlive);
+keepAlive();
+
+// --- הפעלת הלוגיקה ---
 startFastPolling();
 
 function startFastPolling() {
-    // בדיקה ראשונית מיד
-    checkUpdates();
-    
-    // בדיקה כל 3 שניות (3000 מילישניות)
-    // הערה: כרום עלול להאט את זה אם הדפדפן לא בשימוש כבד, אבל זה הכי מהיר שאפשר
+    checkUpdates(); 
     if (intervalId) clearInterval(intervalId);
-    intervalId = setInterval(checkUpdates, 3000);
+    intervalId = setInterval(checkUpdates, 3000); // כל 3 שניות
 }
 
-// מאזין לאירועים כדי לוודא שהבדיקה ממשיכה לרוץ
-chrome.runtime.onStartup.addListener(startFastPolling);
-chrome.runtime.onInstalled.addListener(startFastPolling);
+chrome.runtime.onInstalled.addListener(() => {
+    keepAlive();
+    startFastPolling();
+});
 
+// --- הפונקציה הראשית (המתוקנת) ---
 async function checkUpdates() {
     const data = await chrome.storage.local.get(['watchlist', 'lastCheckTime']);
     const watchlist = data.watchlist || [];
     
-    // אם זו פעם ראשונה, נתחיל לבדוק מעכשיו
+    // אם אין זמן שמור, נגדיר לעכשיו
     let lastCheckTime = data.lastCheckTime || Date.now(); 
 
-    // סינון: רק משתמשים שביקשו עבורם התראה
-    const notifyUsers = watchlist.filter(u => u.notify).map(u => u.name);
+    // סינון: רק משתמשים שביקשו עבורם התראה ושם המשתמש אינו ריק
+    const notifyUsers = watchlist
+        .filter(u => u.notify && u.name && u.name.trim() !== '')
+        .map(u => u.name.trim());
 
     if (notifyUsers.length === 0) return;
 
-    const usersParam = notifyUsers.map(u => encodeURIComponent(u)).join('|');
+    // --- התיקון: פיצול הבקשות (Promise.all) ---
+    // במקום בקשה אחת ארוכה שעלולה להיכשל, אנחנו שולחים בקשה לכל משתמש בנפרד במקביל.
     
+    const fetchPromises = notifyUsers.map(user => {
+        const url = `https://he.wikipedia.org/w/api.php?action=query&list=recentchanges&rcuser=${encodeURIComponent(user)}&rcprop=title|user|timestamp&rcshow=!bot&limit=50&format=json`;
+        return fetch(url)
+            .then(res => res.json())
+            .catch(err => null); // אם בקשה אחת נכשלת, לא לעצור את האחרות
+    });
+
     try {
-        // בקשת API מהירה
-        const url = `https://he.wikipedia.org/w/api.php?action=query&list=recentchanges&rcuser=${usersParam}&rcprop=title|user|timestamp&rcshow=!bot&limit=10&format=json`;
-        
-        const response = await fetch(url);
-        const json = await response.json();
+        // מחכים שכל הבקשות יחזרו
+        const results = await Promise.all(fetchPromises);
 
         const checkTimeNow = Date.now();
-        let newEditsCount = {};
-        let foundNew = false;
+        let newEditsCount = {}; 
+        let foundAnyNew = false;
 
-        if (json.query && json.query.recentchanges) {
-            json.query.recentchanges.forEach(rc => {
-                const editTime = new Date(rc.timestamp).getTime();
-                
-                // בודקים אם העריכה חדשה יותר מהבדיקה האחרונה
-                // הוספנו מרווח ביטחון קטן של 100ms
-                if (editTime > lastCheckTime) {
-                    newEditsCount[rc.user] = (newEditsCount[rc.user] || 0) + 1;
-                    foundNew = true;
-                }
-            });
-
-            for (const [user, count] of Object.entries(newEditsCount)) {
-                sendNotification(user, count);
+        // עוברים על כל התשובות שקיבלנו
+        results.forEach(json => {
+            if (json && json.query && json.query.recentchanges) {
+                json.query.recentchanges.forEach(rc => {
+                    const editTime = new Date(rc.timestamp).getTime();
+                    
+                    // בדיקה אם העריכה חדשה
+                    if (editTime > lastCheckTime) {
+                        newEditsCount[rc.user] = (newEditsCount[rc.user] || 0) + 1;
+                        foundAnyNew = true;
+                    }
+                });
             }
+        });
+
+        // שליחת התראות
+        for (const [user, count] of Object.entries(newEditsCount)) {
+            sendNotification(user, count);
         }
 
-        // עדכון הזמן רק אם היו נתונים תקינים, כדי לא לפספס
-        if (foundNew || json.query) {
+        // עדכון זמן הבדיקה האחרון (רק אם באמת בדקנו בהצלחה)
+        // שים לב: אנחנו מעדכנים גם אם לא מצאנו כלום, כדי לקדם את השעון
+        if (results.length > 0) {
              chrome.storage.local.set({ lastCheckTime: checkTimeNow });
         }
 
     } catch (e) {
-        // התעלמות משגיאות רשת רגעיות כדי לא להציף את הקונסול
+        console.error("Critical error in checkUpdates", e);
     }
 }
 
 function sendNotification(user, count) {
     let title = `התראה מויקיפדיה: ${user}`;
-    let message = count === 1 ? "ביצע עריכה חדשה כעת!" : `ביצע ${count} עריכות חדשות!`;
+    let message = "";
+
+    if (count === 1) {
+        message = "ביצע עריכה חדשה כעת.";
+    } else {
+        message = `ביצע ${count} עריכות חדשות בזמן שלא היית!`;
+    }
 
     chrome.notifications.create({
         type: 'basic',

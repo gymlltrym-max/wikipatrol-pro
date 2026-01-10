@@ -14,8 +14,15 @@ const btn10 = document.getElementById('btn-10');
 const btn50 = document.getElementById('btn-50');
 const btn100 = document.getElementById('btn-100');
 const themeToggleBtn = document.getElementById('theme-toggle-btn');
+const btnTestNotification = document.getElementById('btn-test-notification');
 
-const notificationSound = new Audio('New edit.wav');
+// טעינת אודיו בטוחה
+let notificationSound;
+try {
+    notificationSound = new Audio('New edit.wav');
+} catch (e) {
+    console.error("Audio file missing");
+}
 
 // רשימת מעקב UI
 const watchlistHeader = document.getElementById('watchlist-header');
@@ -26,6 +33,53 @@ const watchlistList = document.getElementById('watchlist-list');
 
 const pagesMap = new Map();
 let watchlist = []; 
+
+// --- בדיקה והעלמת כפתור בדיקת ההתראות ---
+// אם המשתמש כבר ביצע בדיקה בעבר, נעלים את הכפתור מיד
+if (localStorage.getItem('hasTestedNotifications') === 'true') {
+    if (btnTestNotification) btnTestNotification.style.display = 'none';
+}
+
+if (btnTestNotification) {
+    btnTestNotification.addEventListener('click', () => {
+        if (Notification.permission !== 'granted') {
+            Notification.requestPermission().then(permission => {
+                if (permission === 'granted') {
+                    performTest();
+                } else {
+                    alert("ההתראות חסומות בדפדפן. יש לאשר אותן בהגדרות.");
+                }
+            });
+        } else {
+            performTest();
+        }
+    });
+}
+
+function performTest() {
+    playTestSound();
+    
+    // שליחת התראה
+    chrome.notifications.create({
+        type: 'basic',
+        iconUrl: 'icon.png',
+        title: 'בדיקת מערכת תקינה',
+        message: 'ההתראות עובדות! הכפתור הזה ייעלם כעת.',
+        priority: 2,
+        requireInteraction: true
+    });
+
+    // הסתרת הכפתור ושמירה בזיכרון לנצח
+    if (btnTestNotification) btnTestNotification.style.display = 'none';
+    localStorage.setItem('hasTestedNotifications', 'true');
+}
+
+function playTestSound() {
+    if (notificationSound) {
+        notificationSound.currentTime = 0;
+        notificationSound.play().catch(e => {});
+    }
+}
 
 // --- מצב כהה ---
 if (localStorage.getItem('theme') === 'dark') {
@@ -103,12 +157,9 @@ chkNs0.addEventListener('change', () => mainBody.classList.toggle('filter-ns0-ac
 
 selectOres.addEventListener('change', () => {
     mainBody.classList.remove('filter-ores-bad-active', 'filter-ores-good-active');
-    
     if (selectOres.value === 'bad') {
-        // מציג גם בורדו וגם אדום
         mainBody.classList.add('filter-ores-bad-active');
     } else if (selectOres.value === 'good') {
-        // מציג רק ירוק
         mainBody.classList.add('filter-ores-good-active');
     }
 });
@@ -118,18 +169,24 @@ btn50.addEventListener('click', () => loadHistory(50));
 btn100.addEventListener('click', () => loadHistory(100));
 
 async function loadHistory(limit) {
-    let params = `&rclimit=${limit}&rcshow=!bot`;
+    let fetchLimit = limit;
+    if (selectOres.value !== 'all') {
+        fetchLimit = 500; 
+    }
+
+    let params = `&rclimit=${fetchLimit}&rcshow=!bot`;
     if (chkAnon.checked) params += '|anon';
     if (chkNs0.checked) params += '&rcnamespace=0';
-    // חשוב: בקשת oresscores מה-API
+    
     params += '&rcprop=title|timestamp|ids|user|comment|sizes|oresscores';
-    loadFromApi(params);
+    
+    loadFromApi(params, limit);
 }
 
 async function loadUserHistory(username) {
     let params = `&rclimit=50&rcuser=${encodeURIComponent(username)}&rcshow=!bot&rcprop=title|timestamp|ids|user|comment|sizes|oresscores`;
     if (chkNs0.checked) params += '&rcnamespace=0';
-    loadFromApi(params);
+    loadFromApi(params); 
 }
 
 function isAnonymousUser(data) {
@@ -169,7 +226,7 @@ eventSource.onmessage = function(event) {
             if (chkAnon.checked && !isAnon) shouldPlay = false;
             if (chkNs0.checked && standardizedData.namespace !== 0) shouldPlay = false;
             
-            if (shouldPlay) {
+            if (shouldPlay && notificationSound) {
                 notificationSound.currentTime = 0;
                 notificationSound.play().catch(e => {});
             }
@@ -233,10 +290,8 @@ function addChangeItem(data, prepend = true, forceBolt = false) {
     item.setAttribute('data-revid', data.revid);
     item.dataset.link = diffUrl;
     
-    // בברירת מחדל לא מוסיפים צבעי ORES עד שיש ציון
     item.className = `change-item ${userTypeClass} ${trackedClass} ${latestClass} ${nsClass}`;
     
-    // אם הגיע ציון מההיסטוריה, נצבע מיד
     if (data.oresscores) {
         applyOresColor(item, data.oresscores);
     }
@@ -289,31 +344,27 @@ function addChangeItem(data, prepend = true, forceBolt = false) {
     return item;
 }
 
-// --- לוגיקת הצבעים (תיקון חשוב לבורדו/אדום) ---
-function applyOresColor(element, scores) {
-    if (!scores || !scores.damaging || !scores.goodfaith) return;
-
+function checkOresStatus(scores) {
+    if (!scores || !scores.damaging || !scores.goodfaith) return 'none';
     const damagingProb = scores.damaging.true;
     const goodfaithProb = scores.goodfaith.true;
 
-    // ניקוי קלאסים ישנים
-    element.classList.remove('ores-very-bad', 'ores-bad', 'ores-good');
-
-    // 🔴 סביר מאוד שנעשו בכוונה רעה (אדום)
-    if (damagingProb >= 0.75) {
-        element.classList.add('ores-very-bad'); 
-    } 
-    // 🍷 סביר שנעשו בכוונה רעה (בורדו) - הורדנו סף ל-0.35 כדי לתפוס יותר
-    else if (damagingProb >= 0.35) {
-        element.classList.add('ores-bad'); 
-    } 
-    // 🟢 סבירות גבוהה לכוונה טובה (ירוק)
-    else if (goodfaithProb >= 0.85 && damagingProb < 0.20) {
-        element.classList.add('ores-good'); 
-    }
+    if (damagingProb >= 0.75) return 'very-bad';
+    if (damagingProb >= 0.35) return 'bad';
+    if (goodfaithProb >= 0.85 && damagingProb < 0.20) return 'good';
+    return 'neutral';
 }
 
-async function loadFromApi(params) {
+function applyOresColor(element, scores) {
+    const status = checkOresStatus(scores);
+    element.classList.remove('ores-very-bad', 'ores-bad', 'ores-good');
+    
+    if (status === 'very-bad') element.classList.add('ores-very-bad');
+    else if (status === 'bad') element.classList.add('ores-bad');
+    else if (status === 'good') element.classList.add('ores-good');
+}
+
+async function loadFromApi(params, targetCount = null) {
     if (emptyState) emptyState.style.display = 'none';
     feedContainer.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);">⏳ טוען נתונים...</div>';
     pagesMap.clear();
@@ -327,7 +378,20 @@ async function loadFromApi(params) {
 
         if (json.query && json.query.recentchanges) {
             const seenTitles = new Set();
-            json.query.recentchanges.forEach(rc => {
+            let addedCount = 0;
+
+            for (const rc of json.query.recentchanges) {
+                if (targetCount && addedCount >= targetCount) break;
+
+                if (selectOres.value !== 'all') {
+                    const status = checkOresStatus(rc.oresscores);
+                    if (selectOres.value === 'bad') {
+                        if (status !== 'bad' && status !== 'very-bad') continue; 
+                    } else if (selectOres.value === 'good') {
+                        if (status !== 'good') continue;
+                    }
+                }
+
                 const standardizedData = {
                     title: rc.title,
                     user: rc.user,
@@ -338,23 +402,28 @@ async function loadFromApi(params) {
                     old_revid: rc.old_revid,
                     size_diff: rc.newlen - rc.oldlen,
                     namespace: rc.ns, 
-                    oresscores: rc.oresscores // העברת הציון לפונקציית היצירה
+                    oresscores: rc.oresscores 
                 };
+
                 let isLatest = false;
                 if (!seenTitles.has(rc.title)) {
                     isLatest = true;
                     seenTitles.add(rc.title);
                 }
-                addChangeItem(standardizedData, false, isLatest); 
-            });
-        }
-        
-        if (feedContainer.children.length === 0) {
-            feedContainer.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);">לא נמצאו תוצאות לחיפוש זה.</div>';
+
+                addChangeItem(standardizedData, false, isLatest);
+                addedCount++; 
+            }
+            
+            if (addedCount === 0) {
+                feedContainer.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);">לא נמצאו תוצאות העונות לסינון המבוקש.</div>';
+            }
+        } else {
+             feedContainer.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);">אין נתונים להצגה.</div>';
         }
 
     } catch (e) {
-        feedContainer.innerHTML = '<div style="text-align:center; color:red; padding:10px;">שגיאה בטעינת הנתונים. נסה שוב.</div>';
+        feedContainer.innerHTML = '<div style="text-align:center; color:red; padding:10px;">שגיאה בטעינת הנתונים.</div>';
     }
 }
 
