@@ -18,6 +18,10 @@
       --ores-bad-bg: #fadbd8; --ores-bad-border: #a61c00;
       --ores-very-bad-bg: #fce8e6; --ores-very-bad-border: #d93025;
       --ores-good-bg: #e6f4ea; --ores-good-border: #137333;
+      
+      /* צבע חדש: מילים חשודות (סגול) */
+      --suspicious-color: #7b2aff;
+      --suspicious-bg: rgba(123, 42, 255, 0.1);
     }
 
     body.dark-mode {
@@ -34,6 +38,10 @@
       --ores-bad-bg: #5a1000; --ores-bad-border: #ff8a80;
       --ores-very-bad-bg: #3e2a2a; --ores-very-bad-border: #f28b82;
       --ores-good-bg: #0f3618; --ores-good-border: #81c995;
+      
+      /* סגול כהה למצב לילה */
+      --suspicious-color: #9d5cff;
+      --suspicious-bg: rgba(123, 42, 255, 0.15);
     }
 
     body { 
@@ -84,10 +92,7 @@
     }
     .btn:hover { opacity: 0.8; }
 
-    /* כפתור בדיקת התראות */
-    .btn-test {
-        width: 100%; margin-top: 8px; background: var(--primary-color); color: #fff; border: none; padding: 6px;
-    }
+    .btn-test { width: 100%; margin-top: 8px; background: var(--primary-color); color: #fff; border: none; padding: 6px; }
     .btn-test:hover { background: #2c5ebd; }
 
     #watchlist-section { 
@@ -118,10 +123,20 @@
     .change-item.ores-very-bad { border-left-color: var(--ores-very-bad-border) !important; background: var(--ores-very-bad-bg) !important; }
     .change-item.ores-good { border-left-color: var(--ores-good-border) !important; background: var(--ores-good-bg) !important; }
 
+    /* הסגנון החדש למילים חשודות */
+    .change-item.suspicious-comment {
+        border-left-color: var(--suspicious-color) !important;
+        background: var(--suspicious-bg) !important;
+    }
+
+    /* Filters */
     .filter-anon-active .type-registered { display: none !important; }
     .filter-latest-active .change-item:not(.is-latest) { display: none !important; }
     .filter-ns0-active .change-item:not(.namespace-0) { display: none !important; }
-    .filter-ores-bad-active .change-item:not(.ores-bad):not(.ores-very-bad) { display: none !important; }
+    
+    /* פילטר ORES עדכון: מציג גם אדום, גם בורדו, וגם סגול (מילים חשודות) */
+    .filter-ores-bad-active .change-item:not(.ores-bad):not(.ores-very-bad):not(.suspicious-comment) { display: none !important; }
+    
     .filter-ores-good-active .change-item:not(.ores-good) { display: none !important; }
     
     .title { font-weight: 700; color: var(--primary-color); font-size: 14px; display: flex; align-items: center; gap: 4px; }
@@ -194,12 +209,11 @@
             <label for="select-ores" style="margin-left: 5px;">סינון AI:</label>
             <select id="select-ores" class="filter-select">
                 <option value="all">הכל (רגיל)</option>
-                <option value="bad">🔴 חשד להשחתה</option>
+                <option value="bad">🔴 חשד להשחתה + מילים חשודות</option>
                 <option value="good">🟢 כוונה טובה</option>
             </select>
         </div>
 
-        <!-- כפתור בדיקה חדש -->
         <button id="btn-test-notification" class="btn btn-test">🔊 בדיקת התראות והרשאות</button>
     </div>
     
