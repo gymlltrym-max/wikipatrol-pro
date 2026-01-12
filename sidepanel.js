@@ -4,166 +4,27 @@ const loadingIndicator = document.getElementById('loading');
 const emptyState = document.querySelector('.empty-state');
 const mainBody = document.getElementById('main-body');
 
-// כפתורים
+// --- כפתורים ומשתנים (הוספנו את החדשים) ---
 const chkAnon = document.getElementById('chk-anon');
 const chkLatest = document.getElementById('chk-latest');
-const chkNs0 = document.getElementById('chk-ns0'); 
-const chkSound = document.getElementById('chk-sound');
-const selectOres = document.getElementById('select-ores'); 
+const chkNs0 = document.getElementById('chk-ns0'); // חדש: ערכים בלבד
+const chkSound = document.getElementById('chk-sound'); // חדש: צליל
+const selectOres = document.getElementById('select-ores'); // חדש: ORES
 const btn10 = document.getElementById('btn-10');
 const btn50 = document.getElementById('btn-50');
 const btn100 = document.getElementById('btn-100');
 const themeToggleBtn = document.getElementById('theme-toggle-btn');
 const btnTestNotification = document.getElementById('btn-test-notification');
 
-// --- מערכת מוניטין לומדת ---
-const defaultSuspicious = ["כלום", "אמת", "את האמת", "שקר", "את השקר", "נכון", "משעמם", "זה נכון", "אנטישמי", "סתם", "מלכה", "מלך", "בדיקה", "ניסיון", "הומו", "מכוער", "שמן"];
-let suspiciousWords = JSON.parse(localStorage.getItem('suspiciousWords')) || defaultSuspicious;
-let revertCounts = JSON.parse(localStorage.getItem('revertCounts')) || {};
-
-// --- האזור הניטרלי (המטען האפור) ---
-let neutralZone = JSON.parse(localStorage.getItem('neutralZone')) || [];
-
-function addToNeutralZone(data) {
-    if (checkSuspiciousComment(data.comment)) return;
-    if (!data.comment || data.comment.trim().length === 0) return;
-    if (data.type === 'new') return;
-    if (/^\/\*.*?\*\//.test(data.comment)) return;
-    
-    neutralZone.push({
-        revid: data.revid,
-        title: data.title,
-        summary: data.comment,
-        timestamp: Date.now()
-    });
-    
-    localStorage.setItem('neutralZone', JSON.stringify(neutralZone));
-}
-
-async function processNeutralZone() {
-    if (neutralZone.length === 0) return;
-    
-    const now = Date.now();
-    const twentyFourHours = 24 * 60 * 60 * 1000;
-    const itemsToCheck = [];
-    const titlesToCheck = new Set();
-
-    neutralZone = neutralZone.filter(item => {
-        const age = now - item.timestamp;
-        if (age > twentyFourHours) {
-            return false; 
-        }
-        itemsToCheck.push(item);
-        titlesToCheck.add(item.title);
-        return true;
-    });
-    
-    localStorage.setItem('neutralZone', JSON.stringify(neutralZone));
-
-    if (itemsToCheck.length === 0) return;
-
-    const titlesArray = Array.from(titlesToCheck).slice(0, 50);
-    
-    try {
-        const titlesParam = titlesArray.map(t => encodeURIComponent(t)).join('|');
-        const url = `https://he.wikipedia.org/w/api.php?action=query&prop=revisions&titles=${titlesParam}&rvprop=ids|comment&format=json&origin=*`;
-        const res = await fetch(url);
-        const json = await res.json();
-
-        if (json.query && json.query.pages) {
-            let changesMade = false;
-
-            Object.values(json.query.pages).forEach(page => {
-                if (!page.revisions || !page.revisions[0]) return;
-                
-                const latestRev = page.revisions[0];
-                const latestRevId = latestRev.revid;
-                const latestComment = (latestRev.comment || "").toLowerCase();
-
-                const isRevert = latestComment.includes('שוחזר') || latestComment.includes('ביטול') || latestComment.includes('undid') || latestComment.includes('revert');
-
-                neutralZone = neutralZone.filter(item => {
-                    if (item.title === page.title) {
-                        if (latestRevId > item.revid) {
-                            if (isRevert) {
-                                console.log(`🔥 זוהה שחזור מאוחר! התקציר "${item.summary}" נכנס ללמידה.`);
-                                trackRevertSummary(item.summary); 
-                                changesMade = true;
-                                return false; 
-                            }
-                        }
-                    }
-                    return true;
-                });
-            });
-
-            if (changesMade) {
-                localStorage.setItem('neutralZone', JSON.stringify(neutralZone));
-            }
-        }
-    } catch (e) {
-        console.error("Error processing neutral zone", e);
-    }
-}
-
-function learnBadWord(word) {
-    if (!word || word.length < 3) return; 
-    if (suspiciousWords.includes(word)) return; 
-
-    suspiciousWords.push(word);
-    localStorage.setItem('suspiciousWords', JSON.stringify(suspiciousWords));
-    
-    chrome.notifications.create({
-        type: 'basic',
-        iconUrl: 'icon.png',
-        title: 'המערכת למדה משהו חדש!',
-        message: `התקציר "${word}" זוהה כשחזור סדרתי ונוסף לרשימה השחורה.`,
-        priority: 1
-    });
-}
-
-// --- פונקציית מעקב עם ניקוי זיכרון חכם ---
-function trackRevertSummary(summary) {
-    if (!summary || summary.length < 2) return;
-    const cleanSummary = summary.trim();
-    
-    if (!revertCounts[cleanSummary]) {
-        revertCounts[cleanSummary] = 0;
-    }
-    revertCounts[cleanSummary]++;
-    
-    // --- 🧹 ניקוי זיכרון חכם (Garbage Collection) ---
-    // אם צברנו יותר מ-1000 מילים שונות בזיכרון, ננקה את ה"חלשות"
-    const allKeys = Object.keys(revertCounts);
-    if (allKeys.length > 1000) {
-        console.log("🧹 מנקה זיכרון מטמון של מילים חשודות...");
-        
-        // המרת האובייקט למערך לצורך מיון: [[מילה, כמות], [מילה, כמות]...]
-        const entries = Object.entries(revertCounts);
-        
-        // מיון: הכי הרבה שחזורים בהתחלה (יורד)
-        entries.sort((a, b) => b[1] - a[1]);
-        
-        // שמירת ה-500 החזקים בלבד (זורקים את החצי החלש)
-        const top500 = entries.slice(0, 500);
-        
-        // בנייה מחדש של האובייקט
-        revertCounts = Object.fromEntries(top500);
-    }
-    // ---------------------------------------------
-
-    localStorage.setItem('revertCounts', JSON.stringify(revertCounts));
-    
-    if (revertCounts[cleanSummary] > 5) {
-        learnBadWord(cleanSummary);
-    }
-}
-
+// טעינת אודיו בטוחה
 let notificationSound;
 try {
     notificationSound = new Audio('New edit.wav');
-} catch (e) { console.error("Audio missing"); }
+} catch (e) {
+    console.error("Audio file missing");
+}
 
+// --- רשימת מעקב UI (הקוד המקורי שביקשת לשחזר) ---
 const watchlistHeader = document.getElementById('watchlist-header');
 const watchlistContent = document.getElementById('watchlist-content');
 const inputUsername = document.getElementById('input-username');
@@ -173,29 +34,47 @@ const watchlistList = document.getElementById('watchlist-list');
 const pagesMap = new Map();
 let watchlist = []; 
 
+// --- בדיקה והעלמת כפתור בדיקת ההתראות ---
 if (localStorage.getItem('hasTestedNotifications') === 'true') {
     if (btnTestNotification) btnTestNotification.style.display = 'none';
 }
+
 if (btnTestNotification) {
     btnTestNotification.addEventListener('click', () => {
         if (Notification.permission !== 'granted') {
             Notification.requestPermission().then(permission => {
-                if (permission === 'granted') performTest();
-                else alert("ההתראות חסומות בדפדפן.");
+                if (permission === 'granted') {
+                    performTest();
+                } else {
+                    alert("ההתראות חסומות בדפדפן. יש לאשר אותן בהגדרות.");
+                }
             });
-        } else { performTest(); }
+        } else {
+            performTest();
+        }
     });
 }
+
 function performTest() {
-    playTestSound();
-    chrome.notifications.create({ type: 'basic', iconUrl: 'icon.png', title: 'בדיקה תקינה', message: 'ההתראות עובדות!', priority: 2, requireInteraction: true });
+    if (notificationSound) {
+        notificationSound.currentTime = 0;
+        notificationSound.play().catch(e => {});
+    }
+    
+    chrome.notifications.create({
+        type: 'basic',
+        iconUrl: 'icon.png',
+        title: 'בדיקת מערכת תקינה',
+        message: 'ההתראות עובדות! הכפתור הזה ייעלם כעת.',
+        priority: 2,
+        requireInteraction: true
+    });
+
     if (btnTestNotification) btnTestNotification.style.display = 'none';
     localStorage.setItem('hasTestedNotifications', 'true');
 }
-function playTestSound() {
-    if (notificationSound) { notificationSound.currentTime = 0; notificationSound.play().catch(e => {}); }
-}
 
+// --- מצב כהה ---
 if (localStorage.getItem('theme') === 'dark') {
     document.body.classList.add('dark-mode');
     themeToggleBtn.textContent = '☀️';
@@ -208,12 +87,11 @@ themeToggleBtn.addEventListener('click', () => {
     localStorage.setItem('theme', isDark ? 'dark' : 'light');
 });
 
-// --- אתחול והפעלת הטיימרים ---
+// --- אתחול ---
 loadWatchlist();
 
+// אימות גרסה אחרונה (חשוב כדי למנוע את באג השחזורים)
 setInterval(verifyLatestRevisions, 4000);
-setInterval(processNeutralZone, 5 * 60 * 1000);
-processNeutralZone();
 
 watchlistHeader.addEventListener('click', () => watchlistContent.classList.toggle('open'));
 
@@ -243,6 +121,7 @@ function renderWatchlist() {
                 <span class="remove-user" title="הסר">×</span>
             </div>
         `;
+        // כאן התיקון: לחיצה על שם המשתמש טוענת היסטוריה ספציפית שלו
         div.querySelector('.tracked-user-name').addEventListener('click', () => loadUserHistory(item.name));
         div.querySelector('.notify-toggle').addEventListener('change', (e) => {
             item.notify = e.target.checked;
@@ -266,10 +145,12 @@ function loadWatchlist() {
     chrome.storage.local.get(['watchlist'], (result) => { if (result.watchlist) { watchlist = result.watchlist; renderWatchlist(); } });
 }
 
+// --- פילטרים ---
 chkAnon.addEventListener('change', () => mainBody.classList.toggle('filter-anon-active', chkAnon.checked));
 chkLatest.addEventListener('change', () => mainBody.classList.toggle('filter-latest-active', chkLatest.checked));
 chkNs0.addEventListener('change', () => mainBody.classList.toggle('filter-ns0-active', chkNs0.checked));
 
+// פילטר ORES (רק CSS, ללא לוגיקה מסובכת ששוברת)
 selectOres.addEventListener('change', () => {
     mainBody.classList.remove('filter-ores-bad-active', 'filter-ores-good-active');
     if (selectOres.value === 'bad') {
@@ -283,8 +164,13 @@ btn10.addEventListener('click', () => loadHistory(10));
 btn50.addEventListener('click', () => loadHistory(50));
 btn100.addEventListener('click', () => loadHistory(100));
 
+// --- פונקציות טעינה (הפשוטות והיציבות) ---
+
 async function loadHistory(limit) {
+    // בניה רגילה ויציבה של הבקשה
     let fetchLimit = limit;
+    
+    // אם מופעל פילטר ORES, נמשוך יותר כדי שיהיה מה להציג
     if (selectOres.value !== 'all') {
         fetchLimit = 500; 
     }
@@ -295,13 +181,19 @@ async function loadHistory(limit) {
     
     params += '&rcprop=title|timestamp|ids|user|comment|sizes|oresscores';
     
+    // שליחת limit המקורי כיעד
     loadFromApi(params, limit);
 }
 
 async function loadUserHistory(username) {
+    // פונקציה ייעודית למשתמש - בודדנו אותה כדי למנוע באגים
     let params = `&rclimit=50&rcuser=${encodeURIComponent(username)}&rcshow=!bot&rcprop=title|timestamp|ids|user|comment|sizes|oresscores`;
+    
+    // מכבדים רק את פילטר "ערכים בלבד" כאן, מתעלמים מ-ORES כדי להראות את כל הפעילות שלו
     if (chkNs0.checked) params += '&rcnamespace=0';
-    loadFromApi(params); 
+    
+    // טוענים ישירות
+    loadFromApi(params, 50); 
 }
 
 function isAnonymousUser(data) {
@@ -319,13 +211,6 @@ eventSource.onmessage = function(event) {
     const data = JSON.parse(event.data);
     if (data.bot) return; 
 
-    if (data.type === 'edit' && data.comment) {
-        const lowerComment = data.comment.toLowerCase();
-        if (lowerComment.includes('שוחזר') || lowerComment.includes('ביטול') || lowerComment.includes('revert') || lowerComment.includes('undid')) {
-            analyzeRevert(data); 
-        }
-    }
-
     if (data.wiki === 'hewiki' && (data.type === 'edit' || data.type === 'new')) {
         if (emptyState) emptyState.style.display = 'none';
         
@@ -339,17 +224,16 @@ eventSource.onmessage = function(event) {
             old_revid: data.revision ? data.revision.old : null,
             size_diff: (data.length ? data.length.new - data.length.old : 0),
             namespace: data.namespace,
-            oresscores: null,
-            type: data.type
+            oresscores: null // מגיע בנפרד
         };
         
-        addToNeutralZone(standardizedData);
-
+        // --- בדיקת צליל ---
         if (chkSound.checked) {
             const isAnon = isAnonymousUser(standardizedData);
             let shouldPlay = true;
             if (chkAnon.checked && !isAnon) shouldPlay = false;
             if (chkNs0.checked && standardizedData.namespace !== 0) shouldPlay = false;
+            
             if (shouldPlay && notificationSound) {
                 notificationSound.currentTime = 0;
                 notificationSound.play().catch(e => {});
@@ -358,6 +242,7 @@ eventSource.onmessage = function(event) {
 
         const element = addChangeItem(standardizedData, true, true);
 
+        // משיכת ציון ORES
         if (standardizedData.revid) {
             setTimeout(() => {
                 fetchOresScore(standardizedData.revid, element);
@@ -366,22 +251,7 @@ eventSource.onmessage = function(event) {
     }
 };
 
-async function analyzeRevert(revertData) {
-    const title = revertData.title;
-    try {
-        const url = `https://he.wikipedia.org/w/api.php?action=query&prop=revisions&titles=${encodeURIComponent(title)}&rvlimit=2&rvprop=comment|user&format=json&origin=*`;
-        const res = await fetch(url);
-        const json = await res.json();
-        
-        const pageId = Object.keys(json.query.pages)[0];
-        if (pageId && json.query.pages[pageId].revisions && json.query.pages[pageId].revisions.length === 2) {
-            const badEdit = json.query.pages[pageId].revisions[1]; 
-            if (badEdit.comment && badEdit.comment.trim().length > 0) {
-                trackRevertSummary(badEdit.comment);
-            }
-        }
-    } catch (e) { }
-}
+// --- פונקציות עזר (ללא שינוי מהותי מהמקור) ---
 
 async function fetchOresScore(revid, domElement) {
     if (!domElement) return;
@@ -396,12 +266,7 @@ async function fetchOresScore(revid, domElement) {
                 applyOresColor(domElement, rev.oresscores);
             }
         }
-    } catch (e) { console.error("Failed to fetch ORES", e); }
-}
-
-function checkSuspiciousComment(comment) {
-    if (!comment) return false;
-    return suspiciousWords.some(word => comment.includes(word));
+    } catch (e) { }
 }
 
 function addChangeItem(data, prepend = true, forceBolt = false) {
@@ -424,7 +289,9 @@ function addChangeItem(data, prepend = true, forceBolt = false) {
     const latestClass = forceBolt ? 'is-latest' : '';
     const nsClass = data.namespace === 0 ? 'namespace-0' : 'namespace-other';
     
-    const isSuspicious = checkSuspiciousComment(data.comment);
+    // מילים חשודות (קבועות, בלי מנגנון למידה שבור)
+    const suspiciousWords = ["כלום", "אמת", "שקר", "נכון", "משעמם", "אנטישמי", "סתם", "מלכה", "מלך", "בדיקה", "ניסיון", "הומו", "מכוער", "שמן", "שגוי"];
+    const isSuspicious = data.comment && suspiciousWords.some(word => data.comment.includes(word));
     const suspiciousClass = isSuspicious ? 'suspicious-comment' : '';
 
     const encodedUser = encodeURIComponent(data.user);
@@ -493,6 +360,7 @@ function addChangeItem(data, prepend = true, forceBolt = false) {
     return item;
 }
 
+// לוגיקת צבעי ORES וסינון
 function checkOresStatus(scores) {
     if (!scores || !scores.damaging || !scores.goodfaith) return 'none';
     const damagingProb = scores.damaging.true;
@@ -513,7 +381,8 @@ function applyOresColor(element, scores) {
     else if (status === 'good') element.classList.add('ores-good');
 }
 
-async function loadFromApi(params, targetCount = null) {
+// --- המנגנון היציב לטעינת נתונים (Loop & Fetch) ---
+async function loadFromApi(baseParams, targetCount) {
     if (emptyState) emptyState.style.display = 'none';
     feedContainer.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);">⏳ טוען נתונים...</div>';
     pagesMap.clear();
@@ -527,7 +396,7 @@ async function loadFromApi(params, targetCount = null) {
     try {
         while (collectedEdits.length < targetCount && requestsMade < MAX_REQUESTS) {
             
-            let url = `https://he.wikipedia.org/w/api.php?action=query&list=recentchanges&origin=*&format=json${params}&rclimit=${BATCH_SIZE}`;
+            let url = `https://he.wikipedia.org/w/api.php?action=query&list=recentchanges&origin=*&format=json${baseParams}&rclimit=${BATCH_SIZE}`;
             if (continueToken) {
                 url += `&rccontinue=${continueToken}`;
             }
@@ -544,9 +413,13 @@ async function loadFromApi(params, targetCount = null) {
 
                 let isValid = true;
 
+                // סינון ORES (רק אם הפילטר פעיל)
                 if (selectOres.value !== 'all') {
                     const status = checkOresStatus(rc.oresscores);
-                    const isSuspicious = checkSuspiciousComment(rc.comment);
+                    
+                    // בדיקת מילים חשודות גם פה
+                    const suspiciousWords = ["כלום", "אמת", "את האמת", "שקר", "את השקר", "נכון", "משעמם", "זה נכון", "אנטישמי", "אנטשמית", "סתם"];
+                    const isSuspicious = rc.comment && suspiciousWords.some(word => rc.comment.includes(word));
                     
                     if (selectOres.value === 'bad') {
                         if (status !== 'bad' && status !== 'very-bad' && !isSuspicious) isValid = false;
@@ -593,10 +466,11 @@ async function loadFromApi(params, targetCount = null) {
                     seenTitles.add(rc.title);
                 }
 
+                // forceBolt = false (היסטוריה), prepend = false (מוסיפים לפי סדר)
                 addChangeItem(standardizedData, false, isLatest); 
             }
         } else {
-            feedContainer.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);">לא נמצאו עריכות העונות לקריטריונים (לאחר סריקה).</div>';
+            feedContainer.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);">לא נמצאו עריכות העונות לקריטריונים.</div>';
         }
 
     } catch (e) {
