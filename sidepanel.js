@@ -4,12 +4,12 @@ const loadingIndicator = document.getElementById('loading');
 const emptyState = document.querySelector('.empty-state');
 const mainBody = document.getElementById('main-body');
 
-// --- כפתורים ומשתנים (הוספנו את החדשים) ---
+// --- כפתורים ומשתנים ---
 const chkAnon = document.getElementById('chk-anon');
 const chkLatest = document.getElementById('chk-latest');
-const chkNs0 = document.getElementById('chk-ns0'); // חדש: ערכים בלבד
-const chkSound = document.getElementById('chk-sound'); // חדש: צליל
-const selectOres = document.getElementById('select-ores'); // חדש: ORES
+const chkNs0 = document.getElementById('chk-ns0'); 
+const chkSound = document.getElementById('chk-sound');
+const selectOres = document.getElementById('select-ores'); 
 const btn10 = document.getElementById('btn-10');
 const btn50 = document.getElementById('btn-50');
 const btn100 = document.getElementById('btn-100');
@@ -24,7 +24,7 @@ try {
     console.error("Audio file missing");
 }
 
-// --- רשימת מעקב UI (הקוד המקורי שביקשת לשחזר) ---
+// --- רשימת מעקב UI ---
 const watchlistHeader = document.getElementById('watchlist-header');
 const watchlistContent = document.getElementById('watchlist-content');
 const inputUsername = document.getElementById('input-username');
@@ -121,7 +121,6 @@ function renderWatchlist() {
                 <span class="remove-user" title="הסר">×</span>
             </div>
         `;
-        // כאן התיקון: לחיצה על שם המשתמש טוענת היסטוריה ספציפית שלו
         div.querySelector('.tracked-user-name').addEventListener('click', () => loadUserHistory(item.name));
         div.querySelector('.notify-toggle').addEventListener('change', (e) => {
             item.notify = e.target.checked;
@@ -150,7 +149,6 @@ chkAnon.addEventListener('change', () => mainBody.classList.toggle('filter-anon-
 chkLatest.addEventListener('change', () => mainBody.classList.toggle('filter-latest-active', chkLatest.checked));
 chkNs0.addEventListener('change', () => mainBody.classList.toggle('filter-ns0-active', chkNs0.checked));
 
-// פילטר ORES (רק CSS, ללא לוגיקה מסובכת ששוברת)
 selectOres.addEventListener('change', () => {
     mainBody.classList.remove('filter-ores-bad-active', 'filter-ores-good-active');
     if (selectOres.value === 'bad') {
@@ -164,36 +162,46 @@ btn10.addEventListener('click', () => loadHistory(10));
 btn50.addEventListener('click', () => loadHistory(50));
 btn100.addEventListener('click', () => loadHistory(100));
 
-// --- פונקציות טעינה (הפשוטות והיציבות) ---
+// --- פונקציית בדיקת מילים (החדשה והמשופרת) ---
+function checkSuspiciousComment(comment) {
+    if (!comment) return false;
+    
+    // 1. החרגה: קטגוריות אוטומטיות (בטוח)
+    if (comment.includes("נוסף לקטגוריה")) return false;
+
+    // 2. החרגה: רשימה לבנה (מילים בטוחות) - מבטלת חשד
+    const safeWords = ["תיקון", "הוספה", "עדכון", "קישור", "עריכה", "ויקיפדיה", "תקלדה", 
+                       "עיצוב", "קישורים חיצוניים", "הגהה", "ניסוח", "ביטול", "שחזור", "פרק"];
+    
+    // אם אחת המילים הבטוחות קיימת - זה לא חשוד
+    if (safeWords.some(word => comment.includes(word))) return false;
+
+    // 3. בדיקת מילים חשודות (הרשימה השחורה המעודכנת)
+    const suspiciousWords = ["כלום", "אמת", "שקר", "נכון", "משעמם", "אנטישמי", "סתם", "מלכה", "מלך", "בדיקה", "ניסיון", "הומו", "מכוער", "שמן", "שגוי"];
+    
+    return suspiciousWords.some(word => comment.includes(word));
+}
+
+// --- פונקציות טעינה (הלוגיקה החדשה עם הלולאה) ---
 
 async function loadHistory(limit) {
-    // בניה רגילה ויציבה של הבקשה
-    let fetchLimit = limit;
+    let params = `&rcshow=!bot`;
     
-    // אם מופעל פילטר ORES, נמשוך יותר כדי שיהיה מה להציג
-    if (selectOres.value !== 'all') {
-        fetchLimit = 500; 
-    }
-
-    let params = `&rclimit=${fetchLimit}&rcshow=!bot`;
+    // סינונים שיכולים להיעשות ברמת השרת (חוסך זמן)
     if (chkAnon.checked) params += '|anon';
     if (chkNs0.checked) params += '&rcnamespace=0';
     
     params += '&rcprop=title|timestamp|ids|user|comment|sizes|oresscores';
     
-    // שליחת limit המקורי כיעד
+    // קריאה לפונקציה החדשה עם כמות יעד (limit)
     loadFromApi(params, limit);
 }
 
 async function loadUserHistory(username) {
-    // פונקציה ייעודית למשתמש - בודדנו אותה כדי למנוע באגים
-    let params = `&rclimit=50&rcuser=${encodeURIComponent(username)}&rcshow=!bot&rcprop=title|timestamp|ids|user|comment|sizes|oresscores`;
-    
-    // מכבדים רק את פילטר "ערכים בלבד" כאן, מתעלמים מ-ORES כדי להראות את כל הפעילות שלו
+    let params = `&rcuser=${encodeURIComponent(username)}&rcshow=!bot&rcprop=title|timestamp|ids|user|comment|sizes|oresscores`;
     if (chkNs0.checked) params += '&rcnamespace=0';
-    
-    // טוענים ישירות
-    loadFromApi(params, 50); 
+    // משתמש ספציפי - נטען 50
+    loadFromApi(params, 50, true); 
 }
 
 function isAnonymousUser(data) {
@@ -231,9 +239,18 @@ eventSource.onmessage = function(event) {
         if (chkSound.checked) {
             const isAnon = isAnonymousUser(standardizedData);
             let shouldPlay = true;
+            
             if (chkAnon.checked && !isAnon) shouldPlay = false;
             if (chkNs0.checked && standardizedData.namespace !== 0) shouldPlay = false;
             
+            // בדיקת ORES לשידור חי (לצורך הצליל בלבד, נסתמך כרגע על מילים חשודות כי ORES לוקח זמן)
+            if (selectOres.value === 'bad') {
+                if (!checkSuspiciousComment(standardizedData.comment)) shouldPlay = false;
+            } else if (selectOres.value === 'good') {
+                // קשה לדעת אם זה טוב לפני ORES, אז לא ננגן
+                shouldPlay = false;
+            }
+
             if (shouldPlay && notificationSound) {
                 notificationSound.currentTime = 0;
                 notificationSound.play().catch(e => {});
@@ -251,7 +268,7 @@ eventSource.onmessage = function(event) {
     }
 };
 
-// --- פונקציות עזר (ללא שינוי מהותי מהמקור) ---
+// --- פונקציות עזר ---
 
 async function fetchOresScore(revid, domElement) {
     if (!domElement) return;
@@ -289,9 +306,8 @@ function addChangeItem(data, prepend = true, forceBolt = false) {
     const latestClass = forceBolt ? 'is-latest' : '';
     const nsClass = data.namespace === 0 ? 'namespace-0' : 'namespace-other';
     
-    // מילים חשודות (קבועות, בלי מנגנון למידה שבור)
-    const suspiciousWords = ["כלום", "אמת", "שקר", "נכון", "משעמם", "אנטישמי", "סתם", "מלכה", "מלך", "בדיקה", "ניסיון", "הומו", "מכוער", "שמן", "שגוי"];
-    const isSuspicious = data.comment && suspiciousWords.some(word => data.comment.includes(word));
+    // בדיקת מילים חשודות
+    const isSuspicious = checkSuspiciousComment(data.comment);
     const suspiciousClass = isSuspicious ? 'suspicious-comment' : '';
 
     const encodedUser = encodeURIComponent(data.user);
@@ -352,7 +368,8 @@ function addChangeItem(data, prepend = true, forceBolt = false) {
 
     if (prepend) {
         feedContainer.insertBefore(item, feedContainer.firstChild);
-        if (feedContainer.children.length > 200) feedContainer.removeChild(feedContainer.lastChild);
+        // הערה: הסרנו את המחיקה האוטומטית כדי לאפשר לרשימה להתמלא לפי הבקשה
+        // if (feedContainer.children.length > 200) ...
     } else {
         feedContainer.appendChild(item);
     }
@@ -381,19 +398,20 @@ function applyOresColor(element, scores) {
     else if (status === 'good') element.classList.add('ores-good');
 }
 
-// --- המנגנון היציב לטעינת נתונים (Loop & Fetch) ---
-async function loadFromApi(baseParams, targetCount) {
+// --- המנגנון החדש: Loop & Fetch (מבטיח תוצאות מלאות) ---
+async function loadFromApi(baseParams, targetCount, isUserSpecific = false) {
     if (emptyState) emptyState.style.display = 'none';
-    feedContainer.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);">⏳ טוען נתונים...</div>';
+    feedContainer.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);">⏳ מחפש נתונים מתאימים...</div>';
     pagesMap.clear();
 
     const collectedEdits = [];
     let continueToken = null;
     let requestsMade = 0;
-    const MAX_REQUESTS = 15; 
+    const MAX_REQUESTS = 20; // הגדלנו כדי לאפשר חיפוש עמוק יותר
     const BATCH_SIZE = 50;   
 
     try {
+        // הלולאה תרוץ עד שנמצא את הכמות המבוקשת או עד שנתייאש
         while (collectedEdits.length < targetCount && requestsMade < MAX_REQUESTS) {
             
             let url = `https://he.wikipedia.org/w/api.php?action=query&list=recentchanges&origin=*&format=json${baseParams}&rclimit=${BATCH_SIZE}`;
@@ -408,22 +426,23 @@ async function loadFromApi(baseParams, targetCount) {
 
             const batch = json.query.recentchanges;
             
+            // סינון ידני של התוצאות שהתקבלו
             for (const rc of batch) {
                 if (collectedEdits.length >= targetCount) break;
 
                 let isValid = true;
 
-                // סינון ORES (רק אם הפילטר פעיל)
-                if (selectOres.value !== 'all') {
+                // --- לוגיקת סינון ORES קפדנית ---
+                // אנחנו מסננים כאן (בג'אווה סקריפט) ולא סומכים על ה-API
+                if (!isUserSpecific && selectOres.value !== 'all') {
                     const status = checkOresStatus(rc.oresscores);
-                    
-                    // בדיקת מילים חשודות גם פה
-                    const suspiciousWords = ["כלום", "אמת", "את האמת", "שקר", "את השקר", "נכון", "משעמם", "זה נכון", "אנטישמי", "אנטשמית", "סתם"];
-                    const isSuspicious = rc.comment && suspiciousWords.some(word => rc.comment.includes(word));
+                    const isSuspicious = checkSuspiciousComment(rc.comment);
                     
                     if (selectOres.value === 'bad') {
+                        // "חשד להשחתה" = ORES אדום/בורדו או מילה חשודה
                         if (status !== 'bad' && status !== 'very-bad' && !isSuspicious) isValid = false;
                     } else if (selectOres.value === 'good') {
+                        // "כוונה טובה" = ORES ירוק
                         if (status !== 'good') isValid = false;
                     }
                 }
@@ -433,15 +452,17 @@ async function loadFromApi(baseParams, targetCount) {
                 }
             }
 
+            // בדיקה אם צריך להמשיך לדף הבא
             if (json.continue && json.continue.rccontinue) {
                 continueToken = json.continue.rccontinue;
             } else {
-                break;
+                break; // נגמרו הנתונים בויקיפדיה
             }
             
             requestsMade++;
         }
 
+        // --- הצגת התוצאות הסופיות ---
         feedContainer.innerHTML = ''; 
 
         if (collectedEdits.length > 0) {
@@ -466,11 +487,11 @@ async function loadFromApi(baseParams, targetCount) {
                     seenTitles.add(rc.title);
                 }
 
-                // forceBolt = false (היסטוריה), prepend = false (מוסיפים לפי סדר)
+                // מוסיפים לרשימה (false = append to bottom כי זה לפי סדר)
                 addChangeItem(standardizedData, false, isLatest); 
             }
         } else {
-            feedContainer.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);">לא נמצאו עריכות העונות לקריטריונים.</div>';
+            feedContainer.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);">לא נמצאו עריכות העונות לקריטריונים (לאחר סריקה עמוקה).</div>';
         }
 
     } catch (e) {
