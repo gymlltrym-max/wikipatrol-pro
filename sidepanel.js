@@ -1,3 +1,56 @@
+// --- מנגנון בדיקת גרסה, חסימה וטשטוש ---
+chrome.storage.local.get(['updateStatus'], (result) => {
+    if (result.updateStatus && result.updateStatus.status !== 'OK') {
+        const { status, url, latest } = result.updateStatus;
+        
+        // יצירת שכבת טשטוש על כל האפליקציה
+        const blurOverlay = document.createElement('div');
+        blurOverlay.id = 'app-blur-overlay';
+        blurOverlay.style = `
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+            z-index: 9998; pointer-events: all; background: rgba(0,0,0,0.1);
+        `;
+
+        // יצירת הבאנר
+        const banner = document.createElement('div');
+        banner.id = 'update-banner';
+        banner.style = `
+            background: ${status === 'BLOCK' ? '#d93025' : '#f9ab00'};
+            color: white; padding: 15px; text-align: center; font-weight: bold;
+            position: sticky; top: 0; z-index: 9999; direction: rtl;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2); font-family: system-ui, sans-serif;
+        `;
+
+        // בניית תוכן הבאנר - בגרסה חסומה (BLOCK) אין X
+        banner.innerHTML = `
+            <div style="font-size: 15px; margin-bottom: 8px;">
+                ${status === 'BLOCK' ? '🛑 הגרסה שברשותך ישנה מדי ואינה נתמכת עוד' : '✨ עדכון זמין: גרסה ' + latest}
+            </div>
+            <a href="${url}" target="_blank" style="display: inline-block; background: white; color: ${status === 'BLOCK' ? '#d93025' : '#f9ab00'}; padding: 5px 15px; border-radius: 20px; text-decoration: none; font-size: 13px;">לחץ כאן להורדה ועדכון</a>
+            ${status !== 'BLOCK' ? '<span id="close-update-banner" style="float: left; cursor: pointer; font-size: 20px; line-height: 1;">×</span>' : ''}
+        `;
+
+        // הוספת האלמנטים לדף
+        document.body.prepend(banner);
+        document.body.appendChild(blurOverlay);
+
+        // אם זו גרסת BLOCK - נבטל את האפשרות ללחוץ על כלום בשאר הדף
+        if (status === 'BLOCK') {
+            document.body.style.overflow = 'hidden'; // מניעת גלילה
+        }
+
+        // לוגיקת סגירה (רק לגרסאות כתומות - UPDATE_AVAILABLE)
+        if (status !== 'BLOCK') {
+            const closeBtn = document.getElementById('close-update-banner');
+            closeBtn.onclick = () => {
+                banner.remove();
+                blurOverlay.remove();
+                document.body.style.overflow = 'auto'; // החזרת הגלילה
+            };
+        }
+    }
+});
 const feedContainer = document.getElementById('feed-container');
 const diffContent = document.getElementById('diff-content');
 const loadingIndicator = document.getElementById('loading');

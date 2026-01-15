@@ -112,3 +112,60 @@ function sendNotification(user, count) {
         requireInteraction: true
     });
 }
+// ==========================================
+// מנגנון בדיקת גרסה וחסימה (Background)
+// ==========================================
+
+// פונקציית עזר להשוואת מספרי גרסה
+function wpCompareVersions(v1, v2) {
+    if (!v1 || !v2) return 0;
+    return v1.localeCompare(v2, undefined, { numeric: true, sensitivity: 'base' });
+}
+
+// הפונקציה המרכזית שבודקת מול GitHub
+async function wpCheckAppVersion() {
+    const VERSION_URL = 'https://raw.githubusercontent.com/gymlltrym-max/wikipatrol-pro/refs/heads/main/version.json';
+    const currentVersion = chrome.runtime.getManifest().version;
+
+    try {
+        // משיכת הקובץ מ-GitHub עם Timestamp למניעת Cache
+        const response = await fetch(VERSION_URL + '?t=' + Date.now());
+        const data = await response.json();
+
+        let status = 'OK';
+        
+        // 1. בדיקה אם הגרסה חסומה ספציפית (למשל 1.2.0)
+        const isSpecificallyBlocked = data.blocked_versions && data.blocked_versions.includes(currentVersion);
+        
+        // 2. בדיקה אם הגרסה מתחת למינימום הנתמך
+        const isBelowMinimum = wpCompareVersions(currentVersion, data.min_supported_version) < 0;
+
+        if (isSpecificallyBlocked || isBelowMinimum) {
+            status = 'BLOCK'; // אדום, בלי X
+        } else if (wpCompareVersions(currentVersion, data.latest_version) < 0) {
+            status = 'UPDATE_AVAILABLE'; // כתום, עם X
+        }
+
+        // שמירה ל-Storage כדי שה-Sidepanel ידע מה להציג
+        await chrome.storage.local.set({ 
+            updateStatus: {
+                status: status,
+                url: data.download_url,
+                latest: data.latest_version
+            }
+        });
+        
+        console.log("WikiPatrol Version Check:", status);
+    } catch (e) {
+        console.error("Error in Version Check:", e);
+    }
+}
+
+// הגדרת טיימר לבדיקה אוטומטית כל שעה
+chrome.alarms.create('wpVersionCheckAlarm', { periodInMinutes: 60 });
+chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === 'wpVersionCheckAlarm') wpCheckAppVersion();
+});
+
+// הרצה מיידית כשהתוסף עולה
+wpCheckAppVersion();
