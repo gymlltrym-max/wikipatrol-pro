@@ -9,7 +9,9 @@ const chkAnon = document.getElementById('chk-anon');
 const chkLatest = document.getElementById('chk-latest');
 const chkNs0 = document.getElementById('chk-ns0'); 
 const chkSound = document.getElementById('chk-sound');
-const selectOres = document.getElementById('select-ores'); 
+const selectOres = document.getElementById('select-ores');
+const selectPatrol = document.getElementById('select-patrol'); 
+const patrolControls = document.getElementById('patrol-controls');
 const btn10 = document.getElementById('btn-10');
 const btn50 = document.getElementById('btn-50');
 const btn100 = document.getElementById('btn-100');
@@ -17,14 +19,12 @@ const themeToggleBtn = document.getElementById('theme-toggle-btn');
 const btnTestNotification = document.getElementById('btn-test-notification');
 
 // טעינת אודיו בטוחה
-let notificationSound;
+let notificationSound = null;
 try {
     notificationSound = new Audio('New edit.wav');
-} catch (e) {
-    console.error("Audio file missing");
-}
+} catch (e) { console.error("Audio missing"); }
 
-// --- רשימת מעקב UI ---
+// --- UI ---
 const watchlistHeader = document.getElementById('watchlist-header');
 const watchlistContent = document.getElementById('watchlist-content');
 const inputUsername = document.getElementById('input-username');
@@ -34,42 +34,48 @@ const watchlistList = document.getElementById('watchlist-list');
 const pagesMap = new Map();
 let watchlist = []; 
 
-// --- בדיקה והעלמת כפתור בדיקת ההתראות ---
+// --- בדיקת הרשאות מנטר ---
+checkPatrolRights();
+async function checkPatrolRights() {
+    try {
+        const url = `https://he.wikipedia.org/w/api.php?action=query&meta=userinfo&uiprop=groups|rights&format=json`;
+        const res = await fetch(url, { credentials: 'include', cache: 'no-store' }); 
+        const json = await res.json();
+        if (json.query && json.query.userinfo) {
+            const { groups = [], rights = [] } = json.query.userinfo;
+            if (groups.includes('patroller') || groups.includes('sysop') || rights.includes('patrol')) {
+                if (patrolControls) patrolControls.style.display = 'block';
+            }
+        }
+    } catch (e) { }
+}
+
+// --- פונקציות עזר ---
+function checkSuspiciousComment(comment) {
+    if (!comment) return false;
+    if (comment.includes("נוסף לקטגוריה")) return false;
+    const safeWords = ["תיקון", "הוספה", "עדכון", "קישור", "עריכה", "ויקיפדיה", "תקלדה", "עיצוב", "קישורים חיצוניים", "הגהה", "ניסוח", "ביטול", "שחזור", "פרק"];
+    if (safeWords.some(word => comment.includes(word))) return false;
+    const suspiciousWords = ["כלום", "אמת", "שקר", "נכון", "משעמם", "אנטישמי", "סתם", "מלכה", "מלך", "בדיקה", "ניסיון", "הומו", "מכוער", "שמן", "שגוי"];
+    return suspiciousWords.some(word => comment.includes(word));
+}
+
 if (localStorage.getItem('hasTestedNotifications') === 'true') {
     if (btnTestNotification) btnTestNotification.style.display = 'none';
 }
-
 if (btnTestNotification) {
     btnTestNotification.addEventListener('click', () => {
         if (Notification.permission !== 'granted') {
             Notification.requestPermission().then(permission => {
-                if (permission === 'granted') {
-                    performTest();
-                } else {
-                    alert("ההתראות חסומות בדפדפן. יש לאשר אותן בהגדרות.");
-                }
+                if (permission === 'granted') performTest();
+                else alert("ההתראות חסומות בדפדפן.");
             });
-        } else {
-            performTest();
-        }
+        } else { performTest(); }
     });
 }
-
 function performTest() {
-    if (notificationSound) {
-        notificationSound.currentTime = 0;
-        notificationSound.play().catch(e => {});
-    }
-    
-    chrome.notifications.create({
-        type: 'basic',
-        iconUrl: 'icon.png',
-        title: 'בדיקת מערכת תקינה',
-        message: 'ההתראות עובדות! הכפתור הזה ייעלם כעת.',
-        priority: 2,
-        requireInteraction: true
-    });
-
+    if (notificationSound) { notificationSound.currentTime = 0; notificationSound.play().catch(e => {}); }
+    chrome.notifications.create({ type: 'basic', iconUrl: 'icon.png', title: 'בדיקה תקינה', message: 'ההתראות עובדות!', priority: 2, requireInteraction: true });
     if (btnTestNotification) btnTestNotification.style.display = 'none';
     localStorage.setItem('hasTestedNotifications', 'true');
 }
@@ -89,8 +95,6 @@ themeToggleBtn.addEventListener('click', () => {
 
 // --- אתחול ---
 loadWatchlist();
-
-// אימות גרסה אחרונה (חשוב כדי למנוע את באג השחזורים)
 setInterval(verifyLatestRevisions, 4000);
 
 watchlistHeader.addEventListener('click', () => watchlistContent.classList.toggle('open'));
@@ -151,57 +155,40 @@ chkNs0.addEventListener('change', () => mainBody.classList.toggle('filter-ns0-ac
 
 selectOres.addEventListener('change', () => {
     mainBody.classList.remove('filter-ores-bad-active', 'filter-ores-good-active');
-    if (selectOres.value === 'bad') {
-        mainBody.classList.add('filter-ores-bad-active');
-    } else if (selectOres.value === 'good') {
-        mainBody.classList.add('filter-ores-good-active');
-    }
+    if (selectOres.value === 'bad') mainBody.classList.add('filter-ores-bad-active');
+    else if (selectOres.value === 'good') mainBody.classList.add('filter-ores-good-active');
 });
 
 btn10.addEventListener('click', () => loadHistory(10));
 btn50.addEventListener('click', () => loadHistory(50));
 btn100.addEventListener('click', () => loadHistory(100));
 
-// --- פונקציית בדיקת מילים (החדשה והמשופרת) ---
-function checkSuspiciousComment(comment) {
-    if (!comment) return false;
-    
-    // 1. החרגה: קטגוריות אוטומטיות (בטוח)
-    if (comment.includes("נוסף לקטגוריה")) return false;
-
-    // 2. החרגה: רשימה לבנה (מילים בטוחות) - מבטלת חשד
-    const safeWords = ["תיקון", "הוספה", "עדכון", "קישור", "עריכה", "ויקיפדיה", "תקלדה", 
-                       "עיצוב", "קישורים חיצוניים", "הגהה", "ניסוח", "ביטול", "שחזור", "פרק"];
-    
-    // אם אחת המילים הבטוחות קיימת - זה לא חשוד
-    if (safeWords.some(word => comment.includes(word))) return false;
-
-    // 3. בדיקת מילים חשודות (הרשימה השחורה המעודכנת)
-    const suspiciousWords = ["כלום", "אמת", "שקר", "נכון", "משעמם", "אנטישמי", "סתם", "מלכה", "מלך", "בדיקה", "ניסיון", "הומו", "מכוער", "שמן", "שגוי"];
-    
-    return suspiciousWords.some(word => comment.includes(word));
-}
-
-// --- פונקציות טעינה (הלוגיקה החדשה עם הלולאה) ---
-
+// --- פונקציית הטעינה הראשית ---
 async function loadHistory(limit) {
-    let params = `&rcshow=!bot`;
+    // בניה ראשונית של פרמטרים לשרת
+    // אנחנו שולחים לשרת את כל מה שאפשר כדי לחסוך תעבורה,
+    // אבל את הסינונים המורכבים (ORES, גרסה אחרונה) נעשה ב-Loop
     
-    // סינונים שיכולים להיעשות ברמת השרת (חוסך זמן)
-    if (chkAnon.checked) params += '|anon';
+    let showParams = ['!bot'];
+    
+    if (chkAnon.checked) showParams.push('anon');
+    if (selectPatrol.value === 'unpatrolled') showParams.push('!patrolled'); 
+    else if (selectPatrol.value === 'patrolled') showParams.push('patrolled'); 
+
+    let params = `&rcshow=${showParams.join('|')}`;
+    
     if (chkNs0.checked) params += '&rcnamespace=0';
     
-    params += '&rcprop=title|timestamp|ids|user|comment|sizes|oresscores';
+    params += '&rcprop=title|timestamp|ids|user|comment|sizes|oresscores|patrolled';
     
-    // קריאה לפונקציה החדשה עם כמות יעד (limit)
-    loadFromApi(params, limit);
+    // קריאה ללולאה העקשנית
+    loadFromApi(params, limit, false, true); 
 }
 
 async function loadUserHistory(username) {
-    let params = `&rcuser=${encodeURIComponent(username)}&rcshow=!bot&rcprop=title|timestamp|ids|user|comment|sizes|oresscores`;
+    let params = `&rclimit=50&rcuser=${encodeURIComponent(username)}&rcshow=!bot&rcprop=title|timestamp|ids|user|comment|sizes|oresscores|patrolled`;
     if (chkNs0.checked) params += '&rcnamespace=0';
-    // משתמש ספציפי - נטען 50
-    loadFromApi(params, 50, true); 
+    loadFromApi(params, 50, true, true); 
 }
 
 function isAnonymousUser(data) {
@@ -219,6 +206,10 @@ eventSource.onmessage = function(event) {
     const data = JSON.parse(event.data);
     if (data.bot) return; 
 
+    // סינון מנטרים בשידור חי
+    if (selectPatrol.value === 'unpatrolled' && data.patrolled === true) return;
+    if (selectPatrol.value === 'patrolled' && data.patrolled !== true) return;
+
     if (data.wiki === 'hewiki' && (data.type === 'edit' || data.type === 'new')) {
         if (emptyState) emptyState.style.display = 'none';
         
@@ -232,49 +223,36 @@ eventSource.onmessage = function(event) {
             old_revid: data.revision ? data.revision.old : null,
             size_diff: (data.length ? data.length.new - data.length.old : 0),
             namespace: data.namespace,
-            oresscores: null // מגיע בנפרד
+            oresscores: null,
+            patrolled: data.patrolled 
         };
         
-        // --- בדיקת צליל ---
-        if (chkSound.checked) {
-            const isAnon = isAnonymousUser(standardizedData);
-            let shouldPlay = true;
-            
-            if (chkAnon.checked && !isAnon) shouldPlay = false;
-            if (chkNs0.checked && standardizedData.namespace !== 0) shouldPlay = false;
-            
-            // בדיקת ORES לשידור חי (לצורך הצליל בלבד, נסתמך כרגע על מילים חשודות כי ORES לוקח זמן)
-            if (selectOres.value === 'bad') {
-                if (!checkSuspiciousComment(standardizedData.comment)) shouldPlay = false;
-            } else if (selectOres.value === 'good') {
-                // קשה לדעת אם זה טוב לפני ORES, אז לא ננגן
-                shouldPlay = false;
-            }
+        // בדיקות מקומיות נוספות ללייב (כדי לא להשמיע צליל סתם)
+        let passLocalFilters = true;
+        if (chkAnon.checked && !isAnonymousUser(standardizedData)) passLocalFilters = false;
+        if (chkNs0.checked && standardizedData.namespace !== 0) passLocalFilters = false;
+        if (selectOres.value === 'bad' && !checkSuspiciousComment(standardizedData.comment)) passLocalFilters = false;
+        else if (selectOres.value === 'good') passLocalFilters = false; // ORES לוקח זמן, אז בלייב זה לא יעבור
 
-            if (shouldPlay && notificationSound) {
+        if (passLocalFilters) {
+            if (chkSound.checked && notificationSound) {
                 notificationSound.currentTime = 0;
                 notificationSound.play().catch(e => {});
             }
-        }
-
-        const element = addChangeItem(standardizedData, true, true);
-
-        // משיכת ציון ORES
-        if (standardizedData.revid) {
-            setTimeout(() => {
-                fetchOresScore(standardizedData.revid, element);
-            }, 2000);
+            // בשידור חי תמיד מוסיפים (אלא אם כן נכשל בפילטרים הקודמים)
+            const element = addChangeItem(standardizedData, true, true);
+            if (standardizedData.revid) {
+                setTimeout(() => { fetchOresScore(standardizedData.revid, element); }, 2000);
+            }
         }
     }
 };
 
-// --- פונקציות עזר ---
-
 async function fetchOresScore(revid, domElement) {
     if (!domElement) return;
     try {
-        const url = `https://he.wikipedia.org/w/api.php?action=query&prop=revisions&revids=${revid}&rvprop=ids&oresscores=true&format=json&origin=*`;
-        const res = await fetch(url);
+        const url = `https://he.wikipedia.org/w/api.php?action=query&prop=revisions&revids=${revid}&rvprop=ids&oresscores=true&format=json`; 
+        const res = await fetch(url, { credentials: 'include' });
         const json = await res.json();
         const pageId = Object.keys(json.query.pages)[0];
         if (pageId && json.query.pages[pageId].revisions) {
@@ -306,7 +284,6 @@ function addChangeItem(data, prepend = true, forceBolt = false) {
     const latestClass = forceBolt ? 'is-latest' : '';
     const nsClass = data.namespace === 0 ? 'namespace-0' : 'namespace-other';
     
-    // בדיקת מילים חשודות
     const isSuspicious = checkSuspiciousComment(data.comment);
     const suspiciousClass = isSuspicious ? 'suspicious-comment' : '';
 
@@ -321,17 +298,18 @@ function addChangeItem(data, prepend = true, forceBolt = false) {
     item.setAttribute('data-title', data.title);
     item.setAttribute('data-revid', data.revid);
     item.dataset.link = diffUrl;
-    
     item.className = `change-item ${userTypeClass} ${trackedClass} ${latestClass} ${nsClass} ${suspiciousClass}`;
-    
-    if (data.oresscores) {
-        applyOresColor(item, data.oresscores);
-    }
+    if (data.oresscores) applyOresColor(item, data.oresscores);
 
     const sizeClass = data.size_diff > 0 ? 'plus' : (data.size_diff < 0 ? 'minus' : '');
     const sizeStr = data.size_diff > 0 ? `+${data.size_diff}` : `${data.size_diff}`;
     const timeStr = new Date(data.timestamp * 1000).toLocaleTimeString('he-IL', {hour: '2-digit', minute:'2-digit'});
     const lightningDisplay = forceBolt ? 'block' : 'none';
+
+    let unpatrolledHtml = '';
+    if (data.unpatrolled !== undefined || (data.patrolled === false)) { 
+        unpatrolledHtml = `<span class="unpatrolled-mark" title="עריכה זו טרם נבדקה">!</span>`;
+    }
 
     item.innerHTML = `
         <div class="title-row">
@@ -339,9 +317,11 @@ function addChangeItem(data, prepend = true, forceBolt = false) {
                 <img src="lightning.png" class="lightning-icon" title="גרסה אחרונה" style="display: ${lightningDisplay}">
                 ${data.title}
             </div>
-            <span class="diff-size ${sizeClass}">${sizeStr}</span>
+            <div>
+                <span class="diff-size ${sizeClass}">${sizeStr}</span>
+                ${unpatrolledHtml}
+            </div>
         </div>
-        
         <div class="meta-row">
             <div class="user-info">
                 <span class="user-name ${isAnon ? 'anon-style' : ''}">${isTracked ? '⭐ ' : ''}${data.user}</span>
@@ -353,12 +333,10 @@ function addChangeItem(data, prepend = true, forceBolt = false) {
                 <span class="time">${timeStr}</span>
             </div>
         </div>
-
         <div class="comment">${data.comment || '<i>(אין תקציר עריכה)</i>'}</div>
     `;
 
     pagesMap.set(data.title, item);
-
     item.addEventListener('click', (e) => {
         if (e.target.tagName === 'A') return;
         document.querySelectorAll('.change-item').forEach(el => el.classList.remove('selected'));
@@ -366,23 +344,15 @@ function addChangeItem(data, prepend = true, forceBolt = false) {
         loadDiff(data.old_revid, data.revid, data.title);
     });
 
-    if (prepend) {
-        feedContainer.insertBefore(item, feedContainer.firstChild);
-        // הערה: הסרנו את המחיקה האוטומטית כדי לאפשר לרשימה להתמלא לפי הבקשה
-        // if (feedContainer.children.length > 200) ...
-    } else {
-        feedContainer.appendChild(item);
-    }
-    
+    if (prepend) feedContainer.insertBefore(item, feedContainer.firstChild);
+    else feedContainer.appendChild(item);
     return item;
 }
 
-// לוגיקת צבעי ORES וסינון
 function checkOresStatus(scores) {
     if (!scores || !scores.damaging || !scores.goodfaith) return 'none';
     const damagingProb = scores.damaging.true;
     const goodfaithProb = scores.goodfaith.true;
-
     if (damagingProb >= 0.75) return 'very-bad';
     if (damagingProb >= 0.35) return 'bad';
     if (goodfaithProb >= 0.85 && damagingProb < 0.20) return 'good';
@@ -392,81 +362,131 @@ function checkOresStatus(scores) {
 function applyOresColor(element, scores) {
     const status = checkOresStatus(scores);
     element.classList.remove('ores-very-bad', 'ores-bad', 'ores-good');
-    
     if (status === 'very-bad') element.classList.add('ores-very-bad');
     else if (status === 'bad') element.classList.add('ores-bad');
     else if (status === 'good') element.classList.add('ores-good');
 }
 
-// --- המנגנון החדש: Loop & Fetch (מבטיח תוצאות מלאות) ---
-async function loadFromApi(baseParams, targetCount, isUserSpecific = false) {
+// --- המנגנון ה"עקשן" (Bunker Logic) ---
+async function loadFromApi(baseParams, targetCount, isUserSpecific = false, useCredentials = false) {
     if (emptyState) emptyState.style.display = 'none';
-    feedContainer.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);">⏳ מחפש נתונים מתאימים...</div>';
+    feedContainer.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);">⏳ סורק עריכות... אנא המתך (זה לוקח זמן לסנן)...</div>';
     pagesMap.clear();
 
     const collectedEdits = [];
     let continueToken = null;
     let requestsMade = 0;
-    const MAX_REQUESTS = 20; // הגדלנו כדי לאפשר חיפוש עמוק יותר
-    const BATCH_SIZE = 50;   
+    
+    // הגדלת המגבלה כדי למצוא מספיק תוצאות גם בסינונים קשים
+    const MAX_REQUESTS = 100; // שווה ערך ל-50,000 עריכות (כי 500 בכל מכה)
+    const BATCH_SIZE = 500;   // מושכים את המקסימום האפשרי
+
+    const seenTitles = new Set(); // למניעת כפילויות גרסה אחרונה
 
     try {
-        // הלולאה תרוץ עד שנמצא את הכמות המבוקשת או עד שנתייאש
         while (collectedEdits.length < targetCount && requestsMade < MAX_REQUESTS) {
             
-            let url = `https://he.wikipedia.org/w/api.php?action=query&list=recentchanges&origin=*&format=json${baseParams}&rclimit=${BATCH_SIZE}`;
-            if (continueToken) {
-                url += `&rccontinue=${continueToken}`;
-            }
+            let url = `https://he.wikipedia.org/w/api.php?action=query&list=recentchanges&format=json${baseParams}&rclimit=${BATCH_SIZE}`;
+            
+            if (!useCredentials) url += `&origin=*`;
+            if (continueToken) url += `&rccontinue=${continueToken}`;
 
-            const response = await fetch(url);
+            const fetchOptions = useCredentials ? { credentials: 'include' } : {};
+            const response = await fetch(url, fetchOptions);
             const json = await response.json();
             
             if (!json.query || !json.query.recentchanges) break;
 
             const batch = json.query.recentchanges;
-            
-            // סינון ידני של התוצאות שהתקבלו
+            const candidates = []; 
+
+            // --- סינון מקומי (Local Filtering) ---
             for (const rc of batch) {
-                if (collectedEdits.length >= targetCount) break;
+                // בדיקת גרסה אחרונה (כפילויות)
+                if (chkLatest.checked && seenTitles.has(rc.title)) continue;
 
                 let isValid = true;
 
-                // --- לוגיקת סינון ORES קפדנית ---
-                // אנחנו מסננים כאן (בג'אווה סקריפט) ולא סומכים על ה-API
+                // סינון ORES ומילים חשודות
                 if (!isUserSpecific && selectOres.value !== 'all') {
                     const status = checkOresStatus(rc.oresscores);
                     const isSuspicious = checkSuspiciousComment(rc.comment);
                     
                     if (selectOres.value === 'bad') {
-                        // "חשד להשחתה" = ORES אדום/בורדו או מילה חשודה
                         if (status !== 'bad' && status !== 'very-bad' && !isSuspicious) isValid = false;
                     } else if (selectOres.value === 'good') {
-                        // "כוונה טובה" = ORES ירוק
                         if (status !== 'good') isValid = false;
                     }
                 }
 
                 if (isValid) {
-                    collectedEdits.push(rc);
+                    candidates.push(rc);
+                    if (chkLatest.checked) seenTitles.add(rc.title);
                 }
             }
 
-            // בדיקה אם צריך להמשיך לדף הבא
+            // --- אימות גרסה אחרונה מול השרת (Verification) ---
+            // אם המשתמש רוצה "גרסה אחרונה", אנחנו חייבים לוודא שמה שיש לנו זה אכן האחרון בשרת
+            let verifiedBatch = [];
+            
+            if (chkLatest.checked && candidates.length > 0) {
+                // ויקיפדיה מגבילה בקשת info ל-50 כותרות בערך. נפצל לחתיכות.
+                const chunkSize = 50;
+                for (let i = 0; i < candidates.length; i += chunkSize) {
+                    const chunk = candidates.slice(i, i + chunkSize);
+                    const titles = chunk.map(c => c.title);
+                    
+                    const verifyUrl = `https://he.wikipedia.org/w/api.php?action=query&prop=info&titles=${titles.map(t=>encodeURIComponent(t)).join('|')}&format=json`;
+                    const verifyRes = await fetch(verifyUrl, fetchOptions);
+                    const verifyJson = await verifyRes.json();
+                    
+                    const realLatestMap = {}; 
+                    if (verifyJson.query && verifyJson.query.pages) {
+                        Object.values(verifyJson.query.pages).forEach(p => {
+                            realLatestMap[p.title] = p.lastrevid;
+                        });
+                    }
+
+                    const verifiedChunk = chunk.filter(rc => {
+                        const realLast = realLatestMap[rc.title];
+                        return realLast && rc.revid === realLast;
+                    });
+                    
+                    verifiedBatch.push(...verifiedChunk);
+                }
+            } else {
+                verifiedBatch = candidates;
+            }
+
+            // הוספה לרשימה הסופית
+            for (const item of verifiedBatch) {
+                if (collectedEdits.length < targetCount) {
+                    item.isLatestCalculated = chkLatest.checked ? true : false;
+                    
+                    if (!chkLatest.checked) {
+                        if (!seenTitles.has(item.title)) {
+                            item.isLatestCalculated = true;
+                            seenTitles.add(item.title);
+                        }
+                    }
+                    collectedEdits.push(item);
+                }
+            }
+
+            // האם להמשיך?
             if (json.continue && json.continue.rccontinue) {
                 continueToken = json.continue.rccontinue;
             } else {
-                break; // נגמרו הנתונים בויקיפדיה
+                break;
             }
             
             requestsMade++;
         }
 
-        // --- הצגת התוצאות הסופיות ---
+        // --- הצגה ---
         feedContainer.innerHTML = ''; 
 
         if (collectedEdits.length > 0) {
-            const seenTitles = new Set();
             for (const rc of collectedEdits) {
                 const standardizedData = {
                     title: rc.title,
@@ -478,23 +498,18 @@ async function loadFromApi(baseParams, targetCount, isUserSpecific = false) {
                     old_revid: rc.old_revid,
                     size_diff: rc.newlen - rc.oldlen,
                     namespace: rc.ns, 
-                    oresscores: rc.oresscores 
+                    oresscores: rc.oresscores,
+                    unpatrolled: rc.unpatrolled,
+                    patrolled: (rc.unpatrolled === undefined) 
                 };
-
-                let isLatest = false;
-                if (!seenTitles.has(rc.title)) {
-                    isLatest = true;
-                    seenTitles.add(rc.title);
-                }
-
-                // מוסיפים לרשימה (false = append to bottom כי זה לפי סדר)
-                addChangeItem(standardizedData, false, isLatest); 
+                addChangeItem(standardizedData, false, rc.isLatestCalculated); 
             }
         } else {
-            feedContainer.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);">לא נמצאו עריכות העונות לקריטריונים (לאחר סריקה עמוקה).</div>';
+            feedContainer.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);">לא נמצאו עריכות מתאימות. נסה להרחיב את החיפוש.</div>';
         }
 
     } catch (e) {
+        console.error(e);
         feedContainer.innerHTML = '<div style="text-align:center; color:red; padding:10px;">שגיאה בטעינת הנתונים.</div>';
     }
 }
@@ -503,7 +518,8 @@ async function loadDiff(oldId, newId, title) {
     diffContent.innerHTML = '';
     loadingIndicator.style.display = 'block';
     document.getElementById('preview-title').innerText = `סקירת שינויים: ${title}`;
-    const diffUrl = `https://he.wikipedia.org/w/index.php?title=${encodeURIComponent(title)}&diff=${newId}&oldid=${oldId}`;
+    
+    const diffUrl = `https://he.wikipedia.org/w/index.php?title=${encodeURIComponent(title)}&diff=${newId}&oldid=${oldId}&rcid=&patrol=1`;
 
     if (!oldId || oldId === 0) {
         diffContent.innerHTML = `<div style='text-align:center; margin-top:20px; color:#007000; font-weight:bold;'>📄 דף חדש נוצר!</div><br><a href="${diffUrl}" target="_blank" class="diff-link-btn">עבור לערך החדש בויקיפדיה</a>`;
@@ -511,7 +527,7 @@ async function loadDiff(oldId, newId, title) {
         return;
     }
     try {
-        const response = await fetch(`https://he.wikipedia.org/w/api.php?action=compare&fromrev=${oldId}&torev=${newId}&format=json&origin=*`);
+        const response = await fetch(`https://he.wikipedia.org/w/api.php?action=compare&fromrev=${oldId}&torev=${newId}&format=json`);
         const json = await response.json();
         if (json.compare && json.compare['*']) {
             diffContent.innerHTML = `
@@ -546,7 +562,7 @@ async function verifyLatestRevisions() {
 
     try {
         const titlesParam = titlesArray.map(t => encodeURIComponent(t)).join('|');
-        const url = `https://he.wikipedia.org/w/api.php?action=query&prop=info&titles=${titlesParam}&format=json&origin=*`;
+        const url = `https://he.wikipedia.org/w/api.php?action=query&prop=info&titles=${titlesParam}&format=json`;
         const res = await fetch(url);
         const json = await res.json();
 

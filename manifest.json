@@ -1,16 +1,17 @@
 {
   "manifest_version": 3,
   "name": "WikiPatrol Live Pro",
-  "version": "1.3.0",
+  "version": "2.0.0",
   "description": "ניטור בזמן אמת של עריכות בויקיפדיה pro",
   "permissions": [
     "sidePanel",
     "storage",
     "notifications",
-    "alarms"
+    "alarms",
+    "cookies" 
   ],
   "host_permissions": [
-    "https://he.wikipedia.org/*",
+    "https://*.wikipedia.org/*",
     "https://stream.wikimedia.org/*"
   ],
   "background": {
@@ -18,7 +19,10 @@
   },
   "side_panel": {
     "default_path": "sidepanel.html"
- },
+  },
+  "action": {
+    "default_title": "פתח ניטור ויקיפדיה"
+  },
   "icons": {
     "16": "icon.png",
     "48": "icon.png",
