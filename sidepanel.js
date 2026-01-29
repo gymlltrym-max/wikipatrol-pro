@@ -1,67 +1,105 @@
-// --- מנגנון בדיקת גרסה, חסימה וטשטוש ---
-chrome.storage.local.get(['updateStatus'], (result) => {
-    if (result.updateStatus && result.updateStatus.status !== 'OK') {
-        const { status, url, latest } = result.updateStatus;
+// --- מנגנון בדיקת גרסה אקטיבי (רץ בפתיחת החלונית) ---
+(async function checkAppVersion() {
+    const VERSION_URL = 'https://raw.githubusercontent.com/gymlltrym-max/wikipatrol-pro/refs/heads/main/version.json';
+    
+    try {
+        // 1. משיכת הגרסה הנוכחית מהמניפסט
+        const currentVersion = chrome.runtime.getManifest().version;
         
-        // יצירת שכבת טשטוש על כל האפליקציה
-        const blurOverlay = document.createElement('div');
-        blurOverlay.id = 'app-blur-overlay';
-        blurOverlay.style = `
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-            z-index: 9998; pointer-events: all; background: rgba(0,0,0,0.1);
-        `;
+        // 2. בדיקה מול GitHub (עם timestamp למניעת cache)
+        const response = await fetch(VERSION_URL + '?t=' + Date.now());
+        if (!response.ok) return; // אם אין אינטרנט או שגיאה, מתעלמים
+        
+        const data = await response.json();
+        
+        let status = 'OK';
+        
+        // פונקציית השוואת גרסאות
+        const compare = (v1, v2) => v1.localeCompare(v2, undefined, { numeric: true, sensitivity: 'base' });
 
-        // יצירת הבאנר
-        const banner = document.createElement('div');
-        banner.id = 'update-banner';
-        banner.style = `
-            background: ${status === 'BLOCK' ? '#d93025' : '#f9ab00'};
-            color: white; padding: 15px; text-align: center; font-weight: bold;
-            position: sticky; top: 0; z-index: 9999; direction: rtl;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.2); font-family: system-ui, sans-serif;
-        `;
+        // לוגיקת הבדיקה
+        const isBlocked = data.blocked_versions && data.blocked_versions.includes(currentVersion);
+        const isOld = compare(currentVersion, data.min_supported_version) < 0;
+        const hasUpdate = compare(currentVersion, data.latest_version) < 0;
 
-        // בניית תוכן הבאנר - בגרסה חסומה (BLOCK) אין X
-        banner.innerHTML = `
-            <div style="font-size: 15px; margin-bottom: 8px;">
-                ${status === 'BLOCK' ? '🛑 הגרסה שברשותך ישנה מדי ואינה נתמכת עוד' : '✨ עדכון זמין: גרסה ' + latest}
-            </div>
-            <a href="${url}" target="_blank" style="display: inline-block; background: white; color: ${status === 'BLOCK' ? '#d93025' : '#f9ab00'}; padding: 5px 15px; border-radius: 20px; text-decoration: none; font-size: 13px;">לחץ כאן להורדה ועדכון</a>
-            ${status !== 'BLOCK' ? '<span id="close-update-banner" style="float: left; cursor: pointer; font-size: 20px; line-height: 1;">×</span>' : ''}
-        `;
-
-        // הוספת האלמנטים לדף
-        document.body.prepend(banner);
-        document.body.appendChild(blurOverlay);
-
-        // אם זו גרסת BLOCK - נבטל את האפשרות ללחוץ על כלום בשאר הדף
-        if (status === 'BLOCK') {
-            document.body.style.overflow = 'hidden'; // מניעת גלילה
+        if (isBlocked || isOld) {
+            status = 'BLOCK';
+        } else if (hasUpdate) {
+            status = 'UPDATE_AVAILABLE';
         }
 
-        // לוגיקת סגירה (רק לגרסאות כתומות - UPDATE_AVAILABLE)
-        if (status !== 'BLOCK') {
-            const closeBtn = document.getElementById('close-update-banner');
-            closeBtn.onclick = () => {
-                banner.remove();
-                blurOverlay.remove();
-                document.body.style.overflow = 'auto'; // החזרת הגלילה
-            };
+        // 3. הצגת הבאנר אם צריך
+        if (status !== 'OK') {
+            showUpdateBanner(status, data.download_url, data.latest_version);
         }
+
+    } catch (e) {
+        console.error("Version Check Failed:", e);
     }
-});
+})();
+
+function showUpdateBanner(status, url, latest) {
+    // יצירת שכבת טשטוש
+    const blurOverlay = document.createElement('div');
+    blurOverlay.id = 'app-blur-overlay';
+    blurOverlay.style = `
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+        z-index: 9998; pointer-events: all; background: rgba(0,0,0,0.1);
+    `;
+
+    // יצירת הבאנר
+    const banner = document.createElement('div');
+    banner.id = 'update-banner';
+    banner.style = `
+        background: ${status === 'BLOCK' ? '#d93025' : '#f9ab00'};
+        color: white; padding: 15px; text-align: center; font-weight: bold;
+        position: sticky; top: 0; z-index: 9999; direction: rtl;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.2); font-family: system-ui, sans-serif;
+    `;
+
+    banner.innerHTML = `
+        <div style="font-size: 15px; margin-bottom: 8px;">
+            ${status === 'BLOCK' ? '🛑 הגרסה שברשותך ישנה מדי ואינה נתמכת עוד' : '✨ עדכון זמין: גרסה ' + latest}
+        </div>
+        <a href="${url}" target="_blank" style="display: inline-block; background: white; color: ${status === 'BLOCK' ? '#d93025' : '#f9ab00'}; padding: 5px 15px; border-radius: 20px; text-decoration: none; font-size: 13px;">לחץ כאן להורדה ועדכון</a>
+        ${status !== 'BLOCK' ? '<span id="close-update-banner" style="float: left; cursor: pointer; font-size: 20px; line-height: 1;">×</span>' : ''}
+    `;
+
+    document.body.prepend(banner);
+    document.body.appendChild(blurOverlay);
+
+    if (status === 'BLOCK') {
+        document.body.style.overflow = 'hidden';
+    }
+
+    if (status !== 'BLOCK') {
+        document.getElementById('close-update-banner').onclick = () => {
+            banner.remove();
+            blurOverlay.remove();
+            document.body.style.overflow = 'auto';
+        };
+    }
+}
 const feedContainer = document.getElementById('feed-container');
 const diffContent = document.getElementById('diff-content');
 const loadingIndicator = document.getElementById('loading');
 const emptyState = document.querySelector('.empty-state');
 const mainBody = document.getElementById('main-body');
 
-// --- כפתורים ומשתנים ---
+// --- משתנים גלובליים למנגנון הלמידה והסינון ---
+let badWordCounter = JSON.parse(localStorage.getItem('badWordCounter') || "{}");
+// מילים בטוחות (מוגדרות גלובלית כדי שגם מנגנון הלמידה וגם הסינון ישתמשו בהן)
+const safeWords = ["תיקון", "הוספה", "עדכון", "קישור", "עריכה", "ויקיפדיה", "תקלדה", "עיצוב", "קישורים חיצוניים", "הגהה", "ניסוח", "ביטול", "שחזור", "פרק"];
+// מילים חשודות בסיסיות
+const basicSuspiciousWords = ["כלום", "אמת", "את האמת", "שקר", "את השקר", "נכון", "משעמם", "זה נכון", "אנטישמי", "אנטישמית", "סתם", "מלכה", "מלך"];
+
+// --- כפתורים ומשתנים UI ---
 const chkAnon = document.getElementById('chk-anon');
 const chkLatest = document.getElementById('chk-latest');
 const chkNs0 = document.getElementById('chk-ns0'); 
 const chkSound = document.getElementById('chk-sound');
+const volumeSlider = document.getElementById('volume-slider');
 const selectOres = document.getElementById('select-ores');
 const selectPatrol = document.getElementById('select-patrol'); 
 const patrolControls = document.getElementById('patrol-controls');
@@ -71,13 +109,73 @@ const btn100 = document.getElementById('btn-100');
 const themeToggleBtn = document.getElementById('theme-toggle-btn');
 const btnTestNotification = document.getElementById('btn-test-notification');
 
-// טעינת אודיו בטוחה
-let notificationSound = null;
-try {
-    notificationSound = new Audio('New edit.wav');
-} catch (e) { console.error("Audio missing"); }
+// --- מנוע אודיו מתקדם (Web Audio API) להגברה ---
+let audioCtx;
+let audioBuffer = null;
+let currentVolume = 1.0;
 
-// --- UI ---
+// אתחול האודיו
+function initAudio() {
+    try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AudioContext();
+        
+        // טעינת הקובץ לזיכרון
+        fetch('New edit.wav')
+            .then(response => response.arrayBuffer())
+            .then(arrayBuffer => audioCtx.decodeAudioData(arrayBuffer))
+            .then(decodedAudio => {
+                audioBuffer = decodedAudio;
+            })
+            .catch(e => console.error("Error loading audio:", e));
+            
+        // שחזור ווליום שמור
+        const savedVolume = localStorage.getItem('soundVolume');
+        if (savedVolume !== null) {
+            currentVolume = parseFloat(savedVolume);
+            if (volumeSlider) volumeSlider.value = currentVolume;
+        }
+    } catch (e) {
+        console.error("Web Audio API not supported");
+    }
+}
+
+// נגינה עם הגברה (Gain)
+function playSoundWithGain() {
+    if (!audioCtx || !audioBuffer) return;
+    
+    // אם הדפדפן הקפיא את האודיו, נחדש אותו
+    if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+
+    const source = audioCtx.createBufferSource();
+    source.buffer = audioBuffer;
+
+    const gainNode = audioCtx.createGain();
+    gainNode.gain.value = currentVolume; // יכול להיות גדול מ-1 (הגברה)
+
+    source.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    source.start(0);
+}
+
+// הפעלת מנוע האודיו
+initAudio();
+
+// אירוע שינוי ווליום
+if (volumeSlider) {
+    volumeSlider.addEventListener('input', () => {
+        currentVolume = parseFloat(volumeSlider.value);
+        localStorage.setItem('soundVolume', currentVolume);
+    });
+    // צליל בדיקה כשעוזבים את הסליידר
+    volumeSlider.addEventListener('change', () => {
+        playSoundWithGain();
+    });
+}
+
+// --- רשימת מעקב UI ---
 const watchlistHeader = document.getElementById('watchlist-header');
 const watchlistContent = document.getElementById('watchlist-content');
 const inputUsername = document.getElementById('input-username');
@@ -103,14 +201,104 @@ async function checkPatrolRights() {
     } catch (e) { }
 }
 
+// --- המנגנון החכם: מנתח שחזורים, הולך אחורה, וסופר עד 6 ---
+async function analyzeReverts() {
+    try {
+        // 1. מביאים את השחזורים האחרונים
+        const url = `https://he.wikipedia.org/w/api.php?action=query&list=recentchanges&rcprop=title|ids|comment|tags&rclimit=20&format=json&origin=*`;
+        const res = await fetch(url);
+        const json = await res.json();
+        
+        if (!json.query || !json.query.recentchanges) return;
+
+        let learnedWords = JSON.parse(localStorage.getItem('learnedSuspiciousWords') || "[]");
+        let listChanged = false;
+
+        // עוברים על כל עריכה אחרונה
+        for (const rc of json.query.recentchanges) {
+            const comment = rc.comment || "";
+            
+            // 2. האם זו פעולת שחזור?
+            if (comment.includes("ביטול עריכה") || comment.includes("שחזור עריכה") || (rc.tags && rc.tags.includes("mw-revert"))) {
+                
+                // הולכים לבדוק מה שוחזר! (גרסה אחת אחורה)
+                const historyUrl = `https://he.wikipedia.org/w/api.php?action=query&prop=revisions&titles=${encodeURIComponent(rc.title)}&rvlimit=2&rvprop=comment&format=json&origin=*`;
+                const histRes = await fetch(historyUrl);
+                const histJson = await histRes.json();
+                
+                if (!histJson.query || !histJson.query.pages) continue;
+                
+                const pageId = Object.keys(histJson.query.pages)[0];
+                const revisions = histJson.query.pages[pageId].revisions;
+
+                // אם מצאנו את העריכה המקורית (ההשחתה)
+                if (revisions && revisions.length === 2) {
+                    const badEditComment = revisions[1].comment || ""; // זה התקציר של המשחית!
+                    
+                    const words = badEditComment.split(/\s+/);
+                    words.forEach(word => {
+                        const cleanWord = word.trim();
+                        
+                        // תנאי סף: ארוך מ-3, לא בטוח, ולא נלמד כבר
+                        const isNotSafe = !safeWords.some(safe => cleanWord.includes(safe));
+                        
+                        if (cleanWord.length > 3 && isNotSafe && !learnedWords.includes(cleanWord)) {
+                            
+                            // 3. ספירה (רק אחרי 6 פעמים לומדים)
+                            if (!badWordCounter[cleanWord]) badWordCounter[cleanWord] = 0;
+                            badWordCounter[cleanWord]++;
+                            
+                            console.log(`⚠️ מילה חשודה אותרה ("${cleanWord}") - פעמים: ${badWordCounter[cleanWord]}`);
+
+                            if (badWordCounter[cleanWord] >= 6) {
+                                learnedWords.push(cleanWord);
+                                listChanged = true;
+                                
+                                // הודעה למשתמש
+                                chrome.notifications.create({
+                                    type: 'basic',
+                                    iconUrl: 'icon.png',
+                                    title: '🤖 למידה הושלמה',
+                                    message: `המילה "${cleanWord}" גרמה ל-6 שחזורים ונוספה לרשימה השחורה.`,
+                                    priority: 1
+                                });
+                                
+                                // איפוס המונה למילה הזו
+                                delete badWordCounter[cleanWord];
+                            }
+                        }
+                    });
+                }
+            }
+        }
+
+        // שמירה
+        localStorage.setItem('badWordCounter', JSON.stringify(badWordCounter));
+        
+        if (listChanged) {
+            // מגבילים ל-50 המילים האחרונות כדי לשמור על ביצועים
+            localStorage.setItem('learnedSuspiciousWords', JSON.stringify(learnedWords.slice(-50)));
+        }
+
+    } catch (e) {
+        console.error("Learning error:", e);
+    }
+}
+
 // --- פונקציות עזר ---
 function checkSuspiciousComment(comment) {
     if (!comment) return false;
     if (comment.includes("נוסף לקטגוריה")) return false;
-    const safeWords = ["תיקון", "הוספה", "עדכון", "קישור", "עריכה", "ויקיפדיה", "תקלדה", "עיצוב", "קישורים חיצוניים", "הגהה", "ניסוח", "ביטול", "שחזור", "פרק"];
+    
+    // בדיקת מילים בטוחות (גלובלי)
     if (safeWords.some(word => comment.includes(word))) return false;
-    const suspiciousWords = ["כלום", "אמת", "שקר", "נכון", "משעמם", "אנטישמי", "סתם", "מלכה", "מלך", "בדיקה", "ניסיון", "הומו", "מכוער", "שמן", "שגוי"];
-    return suspiciousWords.some(word => comment.includes(word));
+    
+    // בדיקת מילים חשודות בסיסיות
+    if (basicSuspiciousWords.some(word => comment.includes(word))) return true;
+
+    // בדיקת מילים שנלמדו ע"י המנגנון החכם
+    const learnedWords = JSON.parse(localStorage.getItem('learnedSuspiciousWords') || "[]");
+    return learnedWords.some(word => comment.includes(word));
 }
 
 if (localStorage.getItem('hasTestedNotifications') === 'true') {
@@ -127,7 +315,7 @@ if (btnTestNotification) {
     });
 }
 function performTest() {
-    if (notificationSound) { notificationSound.currentTime = 0; notificationSound.play().catch(e => {}); }
+    playSoundWithGain();
     chrome.notifications.create({ type: 'basic', iconUrl: 'icon.png', title: 'בדיקה תקינה', message: 'ההתראות עובדות!', priority: 2, requireInteraction: true });
     if (btnTestNotification) btnTestNotification.style.display = 'none';
     localStorage.setItem('hasTestedNotifications', 'true');
@@ -148,7 +336,8 @@ themeToggleBtn.addEventListener('click', () => {
 
 // --- אתחול ---
 loadWatchlist();
-setInterval(verifyLatestRevisions, 4000);
+setInterval(verifyLatestRevisions, 4000); // בדיקת גרסאות אחרונות
+setInterval(analyzeReverts, 60000); // הפעלת מנגנון הלמידה כל דקה
 
 watchlistHeader.addEventListener('click', () => watchlistContent.classList.toggle('open'));
 
@@ -216,25 +405,15 @@ btn10.addEventListener('click', () => loadHistory(10));
 btn50.addEventListener('click', () => loadHistory(50));
 btn100.addEventListener('click', () => loadHistory(100));
 
-// --- פונקציית הטעינה הראשית ---
+// --- טעינה ---
 async function loadHistory(limit) {
-    // בניה ראשונית של פרמטרים לשרת
-    // אנחנו שולחים לשרת את כל מה שאפשר כדי לחסוך תעבורה,
-    // אבל את הסינונים המורכבים (ORES, גרסה אחרונה) נעשה ב-Loop
-    
-    let showParams = ['!bot'];
-    
-    if (chkAnon.checked) showParams.push('anon');
-    if (selectPatrol.value === 'unpatrolled') showParams.push('!patrolled'); 
-    else if (selectPatrol.value === 'patrolled') showParams.push('patrolled'); 
-
-    let params = `&rcshow=${showParams.join('|')}`;
-    
+    let fetchLimit = 500; 
+    let params = `&rclimit=${fetchLimit}&rcshow=!bot`;
+    if (chkAnon.checked) params += '|anon';
     if (chkNs0.checked) params += '&rcnamespace=0';
-    
+    if (selectPatrol.value === 'unpatrolled') params += '&rcshow=!patrolled'; 
+    else if (selectPatrol.value === 'patrolled') params += '&rcshow=patrolled'; 
     params += '&rcprop=title|timestamp|ids|user|comment|sizes|oresscores|patrolled';
-    
-    // קריאה ללולאה העקשנית
     loadFromApi(params, limit, false, true); 
 }
 
@@ -259,7 +438,6 @@ eventSource.onmessage = function(event) {
     const data = JSON.parse(event.data);
     if (data.bot) return; 
 
-    // סינון מנטרים בשידור חי
     if (selectPatrol.value === 'unpatrolled' && data.patrolled === true) return;
     if (selectPatrol.value === 'patrolled' && data.patrolled !== true) return;
 
@@ -280,23 +458,29 @@ eventSource.onmessage = function(event) {
             patrolled: data.patrolled 
         };
         
-        // בדיקות מקומיות נוספות ללייב (כדי לא להשמיע צליל סתם)
-        let passLocalFilters = true;
-        if (chkAnon.checked && !isAnonymousUser(standardizedData)) passLocalFilters = false;
-        if (chkNs0.checked && standardizedData.namespace !== 0) passLocalFilters = false;
-        if (selectOres.value === 'bad' && !checkSuspiciousComment(standardizedData.comment)) passLocalFilters = false;
-        else if (selectOres.value === 'good') passLocalFilters = false; // ORES לוקח זמן, אז בלייב זה לא יעבור
+        if (chkSound.checked) {
+            const isAnon = isAnonymousUser(standardizedData);
+            let shouldPlay = true;
+            if (chkAnon.checked && !isAnon) shouldPlay = false;
+            if (chkNs0.checked && standardizedData.namespace !== 0) shouldPlay = false;
+            
+            if (selectOres.value === 'bad') {
+                if (!checkSuspiciousComment(standardizedData.comment)) shouldPlay = false;
+            } else if (selectOres.value === 'good') {
+                shouldPlay = false;
+            }
 
-        if (passLocalFilters) {
-            if (chkSound.checked && notificationSound) {
-                notificationSound.currentTime = 0;
-                notificationSound.play().catch(e => {});
+            if (shouldPlay) {
+                playSoundWithGain();
             }
-            // בשידור חי תמיד מוסיפים (אלא אם כן נכשל בפילטרים הקודמים)
-            const element = addChangeItem(standardizedData, true, true);
-            if (standardizedData.revid) {
-                setTimeout(() => { fetchOresScore(standardizedData.revid, element); }, 2000);
-            }
+        }
+
+        const element = addChangeItem(standardizedData, true, true);
+
+        if (standardizedData.revid) {
+            setTimeout(() => {
+                fetchOresScore(standardizedData.revid, element);
+            }, 2000);
         }
     }
 };
@@ -420,21 +604,19 @@ function applyOresColor(element, scores) {
     else if (status === 'good') element.classList.add('ores-good');
 }
 
-// --- המנגנון ה"עקשן" (Bunker Logic) ---
+// --- המנגנון היציב לטעינת נתונים (Loop & Fetch) ---
 async function loadFromApi(baseParams, targetCount, isUserSpecific = false, useCredentials = false) {
     if (emptyState) emptyState.style.display = 'none';
-    feedContainer.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);">⏳ סורק עריכות... אנא המתך (זה לוקח זמן לסנן)...</div>';
+    feedContainer.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);">⏳ טוען נתונים...</div>';
     pagesMap.clear();
 
     const collectedEdits = [];
     let continueToken = null;
     let requestsMade = 0;
-    
-    // הגדלת המגבלה כדי למצוא מספיק תוצאות גם בסינונים קשים
-    const MAX_REQUESTS = 100; // שווה ערך ל-50,000 עריכות (כי 500 בכל מכה)
-    const BATCH_SIZE = 500;   // מושכים את המקסימום האפשרי
+    const MAX_REQUESTS = 200; 
+    const BATCH_SIZE = 500;   
 
-    const seenTitles = new Set(); // למניעת כפילויות גרסה אחרונה
+    const seenTitlesInBatch = new Set();
 
     try {
         while (collectedEdits.length < targetCount && requestsMade < MAX_REQUESTS) {
@@ -453,18 +635,13 @@ async function loadFromApi(baseParams, targetCount, isUserSpecific = false, useC
             const batch = json.query.recentchanges;
             const candidates = []; 
 
-            // --- סינון מקומי (Local Filtering) ---
             for (const rc of batch) {
-                // בדיקת גרסה אחרונה (כפילויות)
-                if (chkLatest.checked && seenTitles.has(rc.title)) continue;
+                if (chkLatest.checked && seenTitlesInBatch.has(rc.title)) continue;
 
                 let isValid = true;
-
-                // סינון ORES ומילים חשודות
                 if (!isUserSpecific && selectOres.value !== 'all') {
                     const status = checkOresStatus(rc.oresscores);
                     const isSuspicious = checkSuspiciousComment(rc.comment);
-                    
                     if (selectOres.value === 'bad') {
                         if (status !== 'bad' && status !== 'very-bad' && !isSuspicious) isValid = false;
                     } else if (selectOres.value === 'good') {
@@ -474,16 +651,13 @@ async function loadFromApi(baseParams, targetCount, isUserSpecific = false, useC
 
                 if (isValid) {
                     candidates.push(rc);
-                    if (chkLatest.checked) seenTitles.add(rc.title);
+                    if (chkLatest.checked) seenTitlesInBatch.add(rc.title);
                 }
             }
 
-            // --- אימות גרסה אחרונה מול השרת (Verification) ---
-            // אם המשתמש רוצה "גרסה אחרונה", אנחנו חייבים לוודא שמה שיש לנו זה אכן האחרון בשרת
             let verifiedBatch = [];
             
             if (chkLatest.checked && candidates.length > 0) {
-                // ויקיפדיה מגבילה בקשת info ל-50 כותרות בערך. נפצל לחתיכות.
                 const chunkSize = 50;
                 for (let i = 0; i < candidates.length; i += chunkSize) {
                     const chunk = candidates.slice(i, i + chunkSize);
@@ -511,22 +685,19 @@ async function loadFromApi(baseParams, targetCount, isUserSpecific = false, useC
                 verifiedBatch = candidates;
             }
 
-            // הוספה לרשימה הסופית
             for (const item of verifiedBatch) {
                 if (collectedEdits.length < targetCount) {
                     item.isLatestCalculated = chkLatest.checked ? true : false;
-                    
                     if (!chkLatest.checked) {
-                        if (!seenTitles.has(item.title)) {
+                        if (!seenTitlesInBatch.has(item.title)) {
                             item.isLatestCalculated = true;
-                            seenTitles.add(item.title);
+                            seenTitlesInBatch.add(item.title);
                         }
                     }
                     collectedEdits.push(item);
                 }
             }
 
-            // האם להמשיך?
             if (json.continue && json.continue.rccontinue) {
                 continueToken = json.continue.rccontinue;
             } else {
@@ -536,7 +707,6 @@ async function loadFromApi(baseParams, targetCount, isUserSpecific = false, useC
             requestsMade++;
         }
 
-        // --- הצגה ---
         feedContainer.innerHTML = ''; 
 
         if (collectedEdits.length > 0) {
@@ -558,7 +728,7 @@ async function loadFromApi(baseParams, targetCount, isUserSpecific = false, useC
                 addChangeItem(standardizedData, false, rc.isLatestCalculated); 
             }
         } else {
-            feedContainer.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);">לא נמצאו עריכות מתאימות. נסה להרחיב את החיפוש.</div>';
+            feedContainer.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);">לא נמצאו עריכות העונות לקריטריונים.</div>';
         }
 
     } catch (e) {
@@ -571,7 +741,6 @@ async function loadDiff(oldId, newId, title) {
     diffContent.innerHTML = '';
     loadingIndicator.style.display = 'block';
     document.getElementById('preview-title').innerText = `סקירת שינויים: ${title}`;
-    
     const diffUrl = `https://he.wikipedia.org/w/index.php?title=${encodeURIComponent(title)}&diff=${newId}&oldid=${oldId}&rcid=&patrol=1`;
 
     if (!oldId || oldId === 0) {

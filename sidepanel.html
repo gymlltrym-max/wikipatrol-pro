@@ -14,7 +14,6 @@
       --link-color: #5f6368;
       --link-hover: #36c;
       
-      /* ORES Colors */
       --ores-bad-bg: #fadbd8; --ores-bad-border: #a61c00;
       --ores-very-bad-bg: #fce8e6; --ores-very-bad-border: #d93025;
       --ores-good-bg: #e6f4ea; --ores-good-border: #137333;
@@ -70,29 +69,6 @@
     }
     .info-icon:hover::after { display: block; }
 
-    /* --- אזור התחברות (חדש) --- */
-    #login-area {
-        background: #e8f0fe;
-        border-bottom: 1px solid var(--border-color);
-        padding: 15px;
-        text-align: center;
-        display: none; /* מוסתר עד שנבדוק סטטוס */
-    }
-    body.dark-mode #login-area { background: #3c4043; }
-
-    #btn-wiki-login {
-        background: #000; color: white; border: none; padding: 8px 15px; 
-        border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 13px;
-        display: inline-flex; align-items: center; gap: 5px;
-    }
-    #btn-wiki-login:hover { background: #333; }
-    
-    #user-status-bar {
-        background: #e6f4ea; color: #137333; font-size: 12px; padding: 4px 10px;
-        border-bottom: 1px solid #137333; display: none; text-align: center; font-weight: bold;
-    }
-    body.dark-mode #user-status-bar { background: #0f3618; color: #81c995; border-color: #81c995; }
-
     #controls {
       background: var(--controls-bg); padding: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
       z-index: 10; border-bottom: 1px solid var(--border-color);
@@ -100,6 +76,15 @@
     
     .checkbox-row { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 8px; user-select: none; }
     input[type="checkbox"] { cursor: pointer; accent-color: var(--primary-color); }
+
+    /* סליידר ווליום משודרג */
+    #volume-slider {
+        width: 70px;
+        height: 4px;
+        margin-right: 5px;
+        cursor: pointer;
+        vertical-align: middle;
+    }
 
     select.filter-select {
         padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border-color);
@@ -151,6 +136,7 @@
     .change-item.ores-good { border-left-color: var(--ores-good-border) !important; background: var(--ores-good-bg) !important; }
     .change-item.suspicious-comment { border-left-color: var(--suspicious-color) !important; background: var(--suspicious-bg) !important; }
 
+    /* Filters */
     .filter-anon-active .type-registered { display: none !important; }
     .filter-latest-active .change-item:not(.is-latest) { display: none !important; }
     .filter-ns0-active .change-item:not(.namespace-0) { display: none !important; }
@@ -203,16 +189,6 @@
 </head>
 <body id="main-body">
 
-  <!-- אזור התחברות לויקיפדיה (חדש!) -->
-  <div id="login-area">
-      <div style="margin-bottom:8px; font-size:13px;">אינך מחובר לויקיפדיה.</div>
-      <button id="btn-wiki-login">🔑 התחבר לויקיפדיה</button>
-      <div style="font-size:11px; color:#666; margin-top:5px;">(נפתח בטאב חדש)</div>
-  </div>
-
-  <!-- פס סטטוס למשתמש מחובר -->
-  <div id="user-status-bar"></div>
-
   <div id="controls">
     <button id="theme-toggle-btn" title="החלף מצב כהה/בהיר">🌙</button>
 
@@ -231,14 +207,16 @@
 
         <div class="checkbox-row">
             <input type="checkbox" id="chk-ns0">
-            <label for="chk-ns0">הצג ערכים בלבד (ללא שיחה)</label>
+            <label for="chk-ns0">הצג ערכים בלבד</label>
             <span class="info-icon" data-tooltip="מסתיר דפי שיחה, טיוטות ודפי משתמש.">i</span>
         </div>
 
         <div class="checkbox-row">
             <input type="checkbox" id="chk-sound">
-            <label for="chk-sound">השמע צליל בעריכה חדשה (🔔)</label>
-            <span class="info-icon" data-tooltip="משמיע צליל 'דינג' כשנכנסת עריכה חדשה העומדת בתנאי הסינון שבחרת.">i</span>
+            <label for="chk-sound">השמע צליל (🔔)</label>
+            <!-- סליידר ווליום משודרג: מקסימום 3 (300%) -->
+            <input type="range" id="volume-slider" min="0" max="3" step="0.1" value="1" title="עוצמת שמע (Boost עד פי 3)">
+            <span class="info-icon" data-tooltip="משמיע צליל 'דינג' כשנכנסת עריכה חדשה העומדת בתנאי הסינון שבחרת. ניתן להגביר עד פי 3 מהרגיל.">i</span>
         </div>
 
         <div class="checkbox-row" style="margin-top: 8px;">
@@ -258,6 +236,7 @@
                     <option value="unpatrolled">❗ עריכות לא בדוקות</option>
                     <option value="patrolled">✔️ עריכות בדוקות</option>
                 </select>
+                <span class="info-icon" data-tooltip="זמין למנטרים בלבד: מאפשר לסנן עריכות שטרם נבדקו.">i</span>
             </div>
         </div>
 
