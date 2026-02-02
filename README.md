@@ -26,7 +26,7 @@ _________________________________________________
 4. הפעילו את **"מצב מפתח" (Developer mode)** בפינה הימנית/שמאלית העליונה.
 5. לחצו על כפתור **"טעינת פריט Unpacked**. 
 6. בחרו את התיקייה שבה שמרתם את קבצי התוסף.
-## הוראות התקנה ל-Microsoft Edge (חינמי) גרסה 1.3.0
+## הוראות התקנה ל-Microsoft Edge (חינמי) גרסה 2.1.0
 1. פתחו את דפדפן Edge והיכנסו לכתובת: `https://microsoftedge.microsoft.com/addons/detail/wikipatrol-live-pro/fkfcbdpcccepfkglfhibigbhinogiegh` 
 2. תלחצו על קבל
 ## הוראות התקנה ל-Firefox (חינמי) 2.1.0
