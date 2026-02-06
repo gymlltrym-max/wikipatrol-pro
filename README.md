@@ -27,7 +27,7 @@ _________________________________________________
 ## הוראות התקנה ל-Microsoft Edge (חינמי) גרסה 2.1.0
 1. פתחו את דפדפן Edge והיכנסו לכתובת: `https://microsoftedge.microsoft.com/addons/detail/wikipatrol-live-pro/fkfcbdpcccepfkglfhibigbhinogiegh` 
 2. תלחצו על קבל
-## הוראות התקנה ל-Firefox (חינמי) 2.1.0
+## הוראות התקנה ל-Firefox (חינמי) 2.1.1
 1. פתחו את דפדפן Firefox והיכנסו לכתובת: `https://addons.mozilla.org/he/firefox/addon/wikipatrol-live-pro/` 
 2. תלחצו על הוספה ל־Firefox
 # היסטוריה עדכונים
