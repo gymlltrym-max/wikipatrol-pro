@@ -92,7 +92,7 @@ let badWordCounter = JSON.parse(localStorage.getItem('badWordCounter') || "{}");
 // מילים בטוחות (מוגדרות גלובלית כדי שגם מנגנון הלמידה וגם הסינון ישתמשו בהן)
 const safeWords = ["תיקון", "הוספה", "עדכון", "קישור", "עריכה", "ויקיפדיה", "תקלדה", "עיצוב", "קישורים חיצוניים", "הגהה", "ניסוח", "ביטול", "שחזור", "פרק"];
 // מילים חשודות בסיסיות
-const basicSuspiciousWords = ["כלום", "אמת", "את האמת", "שקר", "את השקר", "נכון", "משעמם", "זה נכון", "אנטישמי", "אנטישמית", "סתם", "מלכה", "מלך"];
+const basicSuspiciousWords = ["כלום", "אמת", "שקר", "נכון", "משעמם", "אנטישמי", "סתם", "מלכה", "מלך", "בדיקה", "ניסיון", "הומו", "מכוער", "שמן", "שגוי"];
 
 // --- כפתורים ומשתנים UI ---
 const chkAnon = document.getElementById('chk-anon');
@@ -182,10 +182,12 @@ const inputUsername = document.getElementById('input-username');
 const btnAddUser = document.getElementById('btn-add-user');
 const watchlistList = document.getElementById('watchlist-list');
 
+// --- תיקון: משתנים גלובליים וסטטוס מנטר ---
 const pagesMap = new Map();
 let watchlist = []; 
+let isUserPatroller = false; // משתנה ששומר את הסטטוס
 
-// --- בדיקת הרשאות מנטר ---
+// --- בדיקת הרשאות מנטר (מתוקן) ---
 checkPatrolRights();
 async function checkPatrolRights() {
     try {
@@ -194,11 +196,17 @@ async function checkPatrolRights() {
         const json = await res.json();
         if (json.query && json.query.userinfo) {
             const { groups = [], rights = [] } = json.query.userinfo;
+            // בדיקה האם המשתמש מנטר
             if (groups.includes('patroller') || groups.includes('sysop') || rights.includes('patrol')) {
+                isUserPatroller = true; // עדכון המשתנה
                 if (patrolControls) patrolControls.style.display = 'block';
+            } else {
+                isUserPatroller = false;
             }
         }
-    } catch (e) { }
+    } catch (e) { 
+        isUserPatroller = false; 
+    }
 }
 
 // --- המנגנון החכם: מנתח שחזורים, הולך אחורה, וסופר עד 6 ---
@@ -405,21 +413,49 @@ btn10.addEventListener('click', () => loadHistory(10));
 btn50.addEventListener('click', () => loadHistory(50));
 btn100.addEventListener('click', () => loadHistory(100));
 
-// --- טעינה ---
+// --- טעינה (מתוקן) ---
 async function loadHistory(limit) {
-    let fetchLimit = 500; 
-    let params = `&rclimit=${fetchLimit}&rcshow=!bot`;
-    if (chkAnon.checked) params += '|anon';
+    let showParams = ['!bot'];
+    
+    // סינונים רגילים
+    if (chkAnon.checked) showParams.push('anon');
+    
+    // סינון ניטור - רק אם המשתמש הוא מנטר!
+    if (isUserPatroller) {
+        if (selectPatrol.value === 'unpatrolled') showParams.push('!patrolled'); 
+        else if (selectPatrol.value === 'patrolled') showParams.push('patrolled'); 
+    }
+
+    let params = `&rcshow=${showParams.join('|')}`;
+    
     if (chkNs0.checked) params += '&rcnamespace=0';
-    if (selectPatrol.value === 'unpatrolled') params += '&rcshow=!patrolled'; 
-    else if (selectPatrol.value === 'patrolled') params += '&rcshow=patrolled'; 
-    params += '&rcprop=title|timestamp|ids|user|comment|sizes|oresscores|patrolled';
+    
+    // בניית רשימת המאפיינים (Props)
+    let props = 'title|timestamp|ids|user|comment|sizes|oresscores';
+    
+    // בקשת נתוני ניטור - רק אם המשתמש מנטר
+    if (isUserPatroller) {
+        props += '|patrolled';
+    }
+    
+    params += `&rcprop=${props}`;
+    
     loadFromApi(params, limit, false, true); 
 }
 
 async function loadUserHistory(username) {
-    let params = `&rclimit=50&rcuser=${encodeURIComponent(username)}&rcshow=!bot&rcprop=title|timestamp|ids|user|comment|sizes|oresscores|patrolled`;
+    // בניית רשימת המאפיינים (Props)
+    let props = 'title|timestamp|ids|user|comment|sizes|oresscores';
+    
+    // בקשת נתוני ניטור - רק אם המשתמש מנטר
+    if (isUserPatroller) {
+        props += '|patrolled';
+    }
+
+    let params = `&rclimit=50&rcuser=${encodeURIComponent(username)}&rcshow=!bot&rcprop=${props}`;
+    
     if (chkNs0.checked) params += '&rcnamespace=0';
+    
     loadFromApi(params, 50, true, true); 
 }
 
